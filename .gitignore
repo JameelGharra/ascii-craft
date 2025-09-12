@@ -1,0 +1,15 @@
+.DS_Store
+/game/Makefile
+/game/CMakeCache.txt
+/game/CMakeFiles
+/game/cmake_install.cmake
+/game/config.py
+/game/craft
+/game/world
+env
+log.txt
+/game/*.o
+/game/*.db
+/game/*.exe
+/game/*.dll
+/game/*.pyc

@@ -6,6 +6,7 @@
 #define FULLSCREEN 0
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 768
+#define WINDOW_NAME "Craft"
 #define VSYNC 0
 #define SCROLL_THRESHOLD 0.1
 #define MAX_MESSAGES 4
@@ -50,5 +51,10 @@
 #define DELETE_CHUNK_RADIUS 14
 #define CHUNK_SIZE 32
 #define COMMIT_INTERVAL 5
+
+// Maxs
+#define MAX_PLAYERS 128
+#define MAX_NAME_LENGTH 32
+#define MAX_CHUNKS 8192
 
 #endif

@@ -22,11 +22,7 @@ typedef struct {
     Map *block_maps[3][3];
     Map *light_maps[3][3];
 
-    // outputs
-    int miny;
-    int maxy;
-    int faces;
-    GLfloat *data;
+    MesherOutput *output;
 } WorkerItem;
 
 typedef struct {
@@ -432,13 +428,8 @@ static void _check_workers(ChunkManager *manager, Renderer *renderer) {
                     map_copy(&chunk->map, block_map);
                     map_copy(&chunk->lights, light_map);
                 }
-                MesherOutput *temp_mesh = &((MesherOutput) {
-                    .data = item->data,
-                    .miny = item->miny,
-                    .maxy = item->maxy,
-                });
-                _update_chunk(chunk, temp_mesh, renderer);
-                mesher_free_output_data(temp_mesh);
+                _update_chunk(chunk, item->output, renderer);
+                mesher_free_output(&item->output);
             }
             for (int a = 0; a < 3; a++) {
                 for (int b = 0; b < 3; b++) {
@@ -481,17 +472,13 @@ static void _generate_and_upload_mesh(ChunkManager *manager, Chunk *chunk, Rende
             }
         }
     }
-    MesherOutput *mesher_output = _get_mesher_chunk_output(item);
+    MesherOutput *mesher_output = _get_mesher_chunk_output(item); // would return item->output
     _update_chunk(chunk, mesher_output, renderer);
     mesher_free_output(&mesher_output);
     chunk->dirty = 0;
 }
 // will store it appropriately in the WorkerItem passed in (more useful for async path)
 static MesherOutput *_get_mesher_chunk_output(WorkerItem *item) {
-    item->data = NULL;
-    item->faces = 0;
-    item->miny = 0;
-    item->maxy = 0;
     MesherInput mesher_input;
     mesher_input.p = item->p;
     mesher_input.q = item->q;
@@ -499,16 +486,10 @@ static MesherOutput *_get_mesher_chunk_output(WorkerItem *item) {
     memcpy(mesher_input.light, item->light_maps, sizeof(item->light_maps));
     MesherOutput *mesher_output = mesher_compute_chunk(&mesher_input);
     if (mesher_output) {
-        item->data = mesher_output->data;
-        item->faces = mesher_output->faces;
-        item->miny = mesher_output->miny;
-        item->maxy = mesher_output->maxy;
+        item->output = mesher_output;
         return mesher_output;
     } else {
-        item->data = NULL;
-        item->faces = 0;
-        item->miny = 0;
-        item->maxy = 0;
+        item->output = NULL;
         return NULL;
     }
 }
@@ -532,9 +513,6 @@ static int _worker_run(void *arg) {
             _load_chunk(item);
         }
         MesherOutput *mesh_output = _get_mesher_chunk_output(item);
-        if (mesh_output) {
-            mesher_free_output(&mesh_output);
-        }
         mtx_lock(&worker->mtx);
         worker->state = WORKER_DONE;
         mtx_unlock(&worker->mtx);

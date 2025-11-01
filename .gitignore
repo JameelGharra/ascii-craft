@@ -13,3 +13,5 @@ log.txt
 /game/*.exe
 /game/*.dll
 /game/*.pyc
+/build
+.vscode

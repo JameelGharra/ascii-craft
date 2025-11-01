@@ -1,12 +1,9 @@
 #ifndef _input_defs_h_
 #define _input_defs_h_
 
-typedef enum {
-    MOD_SHIFT = 0x0001,
-    MOD_CONTROL = 0x0002,
-    MOD_SUPER = 0x0008,
-
-} InputMod;
+#define INPUT_MOD_SHIFT 0x0001
+#define INPUT_MOD_CONTROL 0x0002
+#define INPUT_MOD_SUPER 0x0008
 
 typedef enum {
     ACTION_INVALID = -1,
@@ -29,6 +26,35 @@ typedef enum {
     KEY_RIGHT = 5,
     KEY_UP = 6,
     KEY_DOWN = 7,
+    KEY_TAB = 8,
+    KEY_SPACE = 9,
+    KEY_LEFT_SHIFT = 10,
+    KEY_A = 'A', 
+    KEY_B, 
+    KEY_C, 
+    KEY_D, 
+    KEY_E, 
+    KEY_F, 
+    KEY_G, 
+    KEY_H, 
+    KEY_I, 
+    KEY_J,
+    KEY_K, 
+    KEY_L, 
+    KEY_M, 
+    KEY_N, 
+    KEY_O, 
+    KEY_P, 
+    KEY_Q, 
+    KEY_R, 
+    KEY_S, 
+    KEY_T, 
+    KEY_U, 
+    KEY_V, 
+    KEY_W, 
+    KEY_X, 
+    KEY_Y, 
+    KEY_Z,
 } InputKey;
 
 typedef enum {

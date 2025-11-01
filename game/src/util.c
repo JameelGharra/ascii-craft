@@ -42,28 +42,8 @@ char *load_file(const char *path) {
     return data;
 }
 
-GLuint gen_buffer(GLsizei size, GLfloat *data) {
-    GLuint buffer;
-    glGenBuffers(1, &buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    return buffer;
-}
-
-void del_buffer(GLuint buffer) {
-    glDeleteBuffers(1, &buffer);
-}
-
 GLfloat *malloc_faces(int components, int faces) {
     return malloc(sizeof(GLfloat) * 6 * components * faces);
-}
-
-GLuint gen_faces(int components, int faces, GLfloat *data) {
-    GLuint buffer = gen_buffer(
-        sizeof(GLfloat) * 6 * components * faces, data);
-    free(data);
-    return buffer;
 }
 
 GLuint make_shader(GLenum type, const char *source) {
@@ -222,4 +202,29 @@ int wrap(const char *input, int max_width, char *output, int max_length) {
     }
     free(text);
     return line_number;
+}
+int chunked(float x) {
+    return floorf(roundf(x) / CHUNK_SIZE);
+}
+int chebyshev_distance(int p1, int q1, int p2, int q2) {
+    int dp = ABS(p1 - p2);
+    int dq = ABS(q1 - q2);
+    return MAX(dp, dq);
+}
+int is_point_in_vertical_bounds(
+    int height,
+    float x, float y, float z,
+    int hx, int hy, int hz)
+{
+    int nx = roundf(x);
+    int ny = roundf(y);
+    int nz = roundf(z);
+    for (int i = 0; i < height; i++)
+    {
+        if (nx == hx && ny - i == hy && nz == hz)
+        {
+            return 1;
+        }
+    }
+    return 0;
 }

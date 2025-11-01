@@ -1,6 +1,8 @@
 #ifndef _config_h_
 #define _config_h_
 
+#include "input_defs.h"
+
 // app parameters
 #define DEBUG 0
 #define FULLSCREEN 0
@@ -14,6 +16,7 @@
 #define USE_CACHE 1
 #define DAY_LENGTH 600
 #define INVERT_MOUSE 0
+#define MOUSE_SENSITIVITY 0.0025f
 
 // rendering options
 #define SHOW_LIGHTS 1
@@ -28,19 +31,19 @@
 #define SHOW_PLAYER_NAMES 1
 
 // key bindings
-#define CRAFT_KEY_FORWARD 'W'
-#define CRAFT_KEY_BACKWARD 'S'
-#define CRAFT_KEY_LEFT 'A'
-#define CRAFT_KEY_RIGHT 'D'
-#define CRAFT_KEY_JUMP GLFW_KEY_SPACE
-#define CRAFT_KEY_FLY GLFW_KEY_TAB
-#define CRAFT_KEY_OBSERVE 'O'
-#define CRAFT_KEY_OBSERVE_INSET 'P'
-#define CRAFT_KEY_ITEM_NEXT 'E'
-#define CRAFT_KEY_ITEM_PREV 'R'
-#define CRAFT_KEY_ZOOM GLFW_KEY_LEFT_SHIFT
-#define CRAFT_KEY_ORTHO 'F'
-#define CRAFT_KEY_CHAT 't'
+#define CRAFT_KEY_FORWARD KEY_W
+#define CRAFT_KEY_BACKWARD KEY_S
+#define CRAFT_KEY_LEFT KEY_A
+#define CRAFT_KEY_RIGHT KEY_D
+#define CRAFT_KEY_JUMP KEY_SPACE
+#define CRAFT_KEY_FLY KEY_TAB
+#define CRAFT_KEY_OBSERVE KEY_O
+#define CRAFT_KEY_OBSERVE_INSET KEY_P
+#define CRAFT_KEY_ITEM_NEXT KEY_E
+#define CRAFT_KEY_ITEM_PREV KEY_R
+#define CRAFT_KEY_ZOOM KEY_LEFT_SHIFT
+#define CRAFT_KEY_ORTHO KEY_F
+#define CRAFT_KEY_CHAT KEY_T
 #define CRAFT_KEY_COMMAND '/'
 #define CRAFT_KEY_SIGN '`'
 

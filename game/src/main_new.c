@@ -419,9 +419,9 @@ int main(int argc, char **argv)
 
         // ACTIONS //
         handle_mouse_input();
+        input_manager_update(g->input_manager, g->window);
         update_ortho_zoom();
         handle_key_movement(me, world_query, dt); // continuous
-        input_manager_update(g->input_manager, g->window);
         handle_commands(world_query);
 
         // FLUSH DATABASE //

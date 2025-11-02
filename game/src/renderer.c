@@ -94,7 +94,8 @@ void renderer_begin_frame(Renderer *renderer) {
     window_update_size(renderer->window);
     window_get_size(renderer->window, &window_width, &window_height);
     glViewport(0, 0, window_width, window_height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT);
 }
 void renderer_begin_world_pass(Renderer *renderer) {
     glClear(GL_DEPTH_BUFFER_BIT);

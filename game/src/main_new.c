@@ -194,8 +194,7 @@ void on_scroll(double y_delta) {
     }
 }
 
-void handle_mouse_input()
-{
+void handle_mouse_input() {
     double m_dx, m_dy;
     window_get_cursor_delta(g->window, &m_dx, &m_dy);
     player_update_look(&g->local_player, m_dx, m_dy, MOUSE_SENSITIVITY);
@@ -357,7 +356,7 @@ void handle_commands(const WorldQuery *world_query) {
 }
 int main(int argc, char **argv)
 {
-    unsigned int frames = 0;
+    // unsigned int frames = 0;
     // INITIALIZATION //
     if(!initialize_main_game_core()) {
         destroy_main_game_core();
@@ -420,9 +419,9 @@ int main(int argc, char **argv)
 
         // ACTIONS //
         handle_mouse_input();
-        input_manager_update(g->input_manager, g->window);
         update_ortho_zoom();
         handle_key_movement(me, world_query, dt); // continuous
+        input_manager_update(g->input_manager, g->window);
         handle_commands(world_query);
 
         // FLUSH DATABASE //
@@ -432,7 +431,7 @@ int main(int argc, char **argv)
         }
 
         // PREPARE TO RENDER //
-        chunk_manager_delete_distant_chunks(g->chunk_manager, g->renderer, s->x, s->z);
+       chunk_manager_delete_distant_chunks(g->chunk_manager, g->renderer, s->x, s->z);
         renderer_update_player(g->renderer, me);
 
         // RENDER 3-D SCENE //

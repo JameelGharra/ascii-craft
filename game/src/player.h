@@ -5,7 +5,7 @@
 #include "config.h"
 #include "world_query.h"
 
-typedef unsigned int RenderableObjectID;
+typedef int RenderableObjectID;
 
 typedef struct {
     float x;

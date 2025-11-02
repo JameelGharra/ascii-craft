@@ -74,6 +74,8 @@ Window *window_create(int width, int height, const char* title, int fullscreen) 
     window->height = window_height;
     window->event_queue = queue_create();
     window_get_cursor_pos(window, &window->previous_mouse_x, &window->previous_mouse_y);
+    window->previous_mouse_x = 0.0f;
+    window->previous_mouse_y = 0.0f;
     if(!window->event_queue) {
         window_free(window);
         return NULL;
@@ -179,8 +181,7 @@ bool window_is_key_down(Window *window, InputKey key) {
     if (window && window->handle) {
         int glfw_key = _translate_input_to_glfw_key(key);
         if (glfw_key != GLFW_KEY_UNKNOWN) {
-            int state = glfwGetKey(window->handle, glfw_key);
-            return state == GLFW_PRESS;
+            return glfwGetKey(window->handle, glfw_key);
         }
     }
     return false;
@@ -189,18 +190,18 @@ void window_get_cursor_delta(Window *window, double *dx, double *dy) {
     if(!window || !dx || !dy) {
         return ;
     }
-    if(window_get_cursor_mode(window) != CURSOR_DISABLED) {
-        *dx = 0;
-        *dy = 0;
-        window_get_cursor_pos(window, &window->previous_mouse_x, &window->previous_mouse_y);
-        return ;
+    if(window_get_cursor_mode(window) == CURSOR_DISABLED && 
+    (window->previous_mouse_x || window->previous_mouse_y)) {
+        double current_x, current_y;
+        window_get_cursor_pos(window, &current_x, &current_y);
+        *dx = current_x - window->previous_mouse_x;
+        *dy = current_y - window->previous_mouse_y;
+        window->previous_mouse_x = current_x;
+        window->previous_mouse_y = current_y;
     }
-    double current_x, current_y;
-    window_get_cursor_pos(window, &current_x, &current_y);
-    *dx = current_x - window->previous_mouse_x;
-    *dy = current_y - window->previous_mouse_y;
-    window->previous_mouse_x = current_x;
-    window->previous_mouse_y = current_y;
+    else {
+        window_get_cursor_pos(window, &window->previous_mouse_x, &window->previous_mouse_y);
+    }
 }
 
 // INTERNAL HELPERS IMPLEMENTATIONS //

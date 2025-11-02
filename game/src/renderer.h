@@ -7,7 +7,7 @@
 #include "window.h"
 #include "camera.h"
 
-typedef unsigned int RenderableObjectID; // opaque ID for renderer data
+typedef int RenderableObjectID; // opaque ID for renderer data
 typedef struct Player Player;
 
 #define INVALID_RENDERABLE_OBJECT_ID ((RenderableObjectID)(-1))

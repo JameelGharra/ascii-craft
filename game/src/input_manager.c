@@ -3,7 +3,6 @@
 #include "input_manager.h"
 #include "queue.h"
 #include "config.h"
-#include <stdio.h>
 
 struct InputManager {
     Queue *command_queue;
@@ -89,7 +88,6 @@ void input_manager_free(InputManager *manager) {
 }
 // INTERNAL HELPERS IMPLEMENTATIONS //
 static bool _construct_key_command(Window *window, WindowEvent *event, GameCommand *command) {
-    printf("I went here for key event\n");
     if(event->data.key.action != ACTION_PRESS) {
         return false;
     }
@@ -112,7 +110,6 @@ static bool _construct_key_command(Window *window, WindowEvent *event, GameComma
         return true;
     }
     if((event->data.key.key >= '1' && event->data.key.key <= '9') || event->data.key.key == '0') {
-        printf("I went here with key %d\n", event->data.key.key);
         command->type = COMMAND_SET_ITEM_INDEX;
         if(event->data.key.key == '0') {
             command->data.set_item.index = 9;

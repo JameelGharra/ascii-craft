@@ -1,12 +1,11 @@
 #include "queue.h"
 #include <stdlib.h>
 
-typedef struct QueueNode QueueNode;
-
-static struct QueueNode {
+struct QueueNode {
     void *item;
-    QueueNode *next;
+    struct QueueNode *next;
 };
+typedef struct QueueNode QueueNode;
 
 struct Queue {
     QueueNode *front;

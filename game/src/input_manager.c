@@ -3,7 +3,6 @@
 #include "input_manager.h"
 #include "queue.h"
 #include "config.h"
-#include <stdio.h>
 
 struct InputManager {
     Queue *command_queue;
@@ -21,7 +20,6 @@ void input_manager_update(InputManager *manager, Window *window) {
     }
     WindowEvent event;
     while(window_poll_event(window, &event)) {
-        printf("InputManager processing event of type: %d\n", event.type);
         GameCommand *command = (GameCommand *)malloc(sizeof(GameCommand));
         if(!command) {
             return ;
@@ -138,7 +136,6 @@ static bool _construct_mouse_button_command(Window *window, WindowEvent *event, 
     int control = event->data.mouse_button.mods & (INPUT_MOD_CONTROL | INPUT_MOD_SUPER);
     int exclusive = window_get_cursor_mode(window) == CURSOR_DISABLED;
     if(event->data.mouse_button.action != ACTION_PRESS) {
-        printf("Eliminated mouse button event due to non-press action\n");
         return false;
     }
     if(event->data.mouse_button.button == MOUSE_BUTTON_LEFT) {

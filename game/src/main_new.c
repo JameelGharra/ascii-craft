@@ -18,6 +18,8 @@
 #include "chunk_manager.h"
 #include "input_manager.h"
 #include "world_query.h"
+#include "time.h"
+#include "game_clock.h"
 
 #define MAX_PATH_LENGTH 256
 
@@ -39,39 +41,12 @@ typedef struct
 static Model model;
 static Model *g = &model;
 
-float time_of_day()
-{
-    if (g->day_length <= 0)
-    {
-        return 0.5;
-    }
-    float t;
-    t = glfwGetTime();
-    t = t / g->day_length;
-    t = t - (int)t;
-    return t;
-}
-
-float get_daylight()
-{
-    float timer = time_of_day();
-    if (timer < 0.5)
-    {
-        float t = (timer - 0.25) * 100;
-        return 1 / (1 + powf(2, -t));
-    }
-    else
-    {
-        float t = (timer - 0.85) * 100;
-        return 1 - 1 / (1 + powf(2, -t));
-    }
-}
 
 void proceed_render_chunks(const Camera *view) {
     int p = chunked(view->x);
     int q = chunked(view->z);
-    float light = get_daylight();
-    renderer_begin_chunk_pass(g->renderer, view, light, time_of_day());
+    float light = game_clock_get_daylight();
+    renderer_begin_chunk_pass(g->renderer, view, light, game_clock_get_time_of_day());
     ChunkIterator it = chunk_manager_iterator_begin(g->chunk_manager);
     while(chunk_manager_iterator_has_next(&it)) {
         Chunk *chunk = chunk_manager_iterator_next(&it);
@@ -118,7 +93,7 @@ void proceed_render_wireframe(const Camera *view, WorldQuery *world)
 
 void proceed_render_item(const Camera *view) {
 
-    renderer_begin_item_pass(g->renderer, view, time_of_day());
+    renderer_begin_item_pass(g->renderer, view, game_clock_get_time_of_day());
     int w = items[g->item_index];
     if (is_plant(w)) {
         renderer_draw_plant(g->renderer, w);
@@ -236,9 +211,9 @@ void reset_model()
     chunk_manager_reset(g->chunk_manager);
     renderer_reset(g->renderer);
     g->item_index = 0;
-    g->day_length = DAY_LENGTH;
-    glfwSetTime(g->day_length / 3.0);
     g->time_changed = 1;
+    game_clock_set_day_length(DAY_LENGTH);
+    game_clock_set_to(TIME_OF_DAY_MORNING);
 }
 void update_ortho_zoom() {
     g->ortho = window_is_key_down(g->window, CRAFT_KEY_ORTHO) ? 64 : 0;
@@ -266,6 +241,8 @@ void load_shaders() {
 int initialize_main_game_core() {
     srand(time(NULL));
     rand();
+    time_init();
+    game_clock_init(DAY_LENGTH);
     if (!window_global_init())
     {
         return 0;
@@ -380,8 +357,8 @@ int main(int argc, char **argv)
     // LOCAL VARIABLES //
     reset_model();
     FPS fps = {0, 0, 0};
-    double last_commit = glfwGetTime();
-    double last_update = glfwGetTime();
+    double last_commit = time_get_seconds();
+    double last_update = time_get_seconds();
     renderer_generate_sky_buffer(g->renderer);
 
     Player *me = &g->local_player;
@@ -397,7 +374,7 @@ int main(int argc, char **argv)
     }
 
     // BEGIN MAIN LOOP //
-    double previous = glfwGetTime();
+    double previous = time_get_seconds();
     while (true) {
         // printf("Frame number: %u\n", frames++);
         // WINDOW SIZE, SCALE AND CLEAR CANVAS //
@@ -406,12 +383,12 @@ int main(int argc, char **argv)
         // FRAME RATE //
         if (g->time_changed) {
             g->time_changed = 0;
-            last_commit = glfwGetTime();
-            last_update = glfwGetTime();
+            last_commit = time_get_seconds();
+            last_update = time_get_seconds();
             memset(&fps, 0, sizeof(fps));
         }
         update_fps(&fps);
-        double now = glfwGetTime();
+        double now = time_get_seconds();
         double dt = now - previous;
         dt = MIN(dt, 0.2);
         dt = MAX(dt, 0.0);
@@ -437,7 +414,7 @@ int main(int argc, char **argv)
         // RENDER 3-D SCENE //
         Camera view;
         retrieve_camera_view_params(me, &view);
-        renderer_render_sky(g->renderer, &view, time_of_day());
+        renderer_render_sky(g->renderer, &view, game_clock_get_time_of_day());
         renderer_begin_world_pass(g->renderer);
         // printf("Camera Position: (%.2f, %.2f, %.2f)  Rotation: (%.2f, %.2f)  FOV: %.2f  Ortho: %d\n",
             // view.x, view.y, view.z, view.rx, view.ry, view.fov, view.ortho);
@@ -459,7 +436,6 @@ int main(int argc, char **argv)
         if (SHOW_ITEM) {
             proceed_render_item(&view);
         }
-
         // SWAP AND POLL //
         if(!window_next_frame(g->window)) {
             break;

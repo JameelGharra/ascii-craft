@@ -400,7 +400,7 @@ int main(int argc, char **argv)
     // BEGIN MAIN LOOP //
     double previous = glfwGetTime();
     while (true) {
-        printf("Frame number: %u\n", frames++);
+        // printf("Frame number: %u\n", frames++);
         // WINDOW SIZE, SCALE AND CLEAR CANVAS //
         renderer_begin_frame(g->renderer);
 
@@ -440,14 +440,14 @@ int main(int argc, char **argv)
         retrieve_camera_view_params(me, &view);
         renderer_render_sky(g->renderer, &view, time_of_day());
         renderer_begin_world_pass(g->renderer);
-        printf("Camera Position: (%.2f, %.2f, %.2f)  Rotation: (%.2f, %.2f)  FOV: %.2f  Ortho: %d\n",
-            view.x, view.y, view.z, view.rx, view.ry, view.fov, view.ortho);
+        // printf("Camera Position: (%.2f, %.2f, %.2f)  Rotation: (%.2f, %.2f)  FOV: %.2f  Ortho: %d\n",
+            // view.x, view.y, view.z, view.rx, view.ry, view.fov, view.ortho);
         chunk_manager_update(g->chunk_manager, &view, g->renderer);
-        printf("ChunkManager updated the chunks \n");
+        // printf("ChunkManager updated the chunks \n");
         proceed_render_chunks(&view);
-        printf("Chunks rendered \n");
+        // printf("Chunks rendered \n");
         proceed_render_signs(&view);
-        printf("Signs rendered \n");
+        // printf("Signs rendered \n");
         if (SHOW_WIREFRAME) {
             proceed_render_wireframe(&view, world_query);
         }

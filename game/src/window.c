@@ -278,6 +278,9 @@ static InputKey _translate_key_to_input(int glfw_key) {
         case GLFW_KEY_TAB: return KEY_TAB;
         case GLFW_KEY_SPACE: return KEY_SPACE;
         case GLFW_KEY_LEFT_SHIFT: return KEY_LEFT_SHIFT;
+        case GLFW_KEY_0: case GLFW_KEY_1: case GLFW_KEY_2: case GLFW_KEY_3: case GLFW_KEY_4:
+             case GLFW_KEY_5: case GLFW_KEY_6: case GLFW_KEY_7: case GLFW_KEY_8: case GLFW_KEY_9:
+            return (InputKey)(KEY_0 + (glfw_key - GLFW_KEY_0));
         default: return KEY_INVALID;
     }
 }
@@ -296,6 +299,9 @@ static int _translate_input_to_glfw_key(InputKey key) {
         case KEY_TAB: return GLFW_KEY_TAB;
         case KEY_SPACE: return GLFW_KEY_SPACE;
         case KEY_LEFT_SHIFT: return GLFW_KEY_LEFT_SHIFT;
+        case KEY_0: case KEY_1: case KEY_2: case KEY_3: case KEY_4:
+             case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9:
+            return GLFW_KEY_0 + (key - KEY_0);
         default: return GLFW_KEY_UNKNOWN;
     }
 }

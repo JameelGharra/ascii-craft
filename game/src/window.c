@@ -155,7 +155,7 @@ void window_get_cursor_pos(Window *window, double *xpos, double *ypos) {
 }
 bool window_next_frame(Window *window) {
     if (window && window->handle) {
-        glfwSwapBuffers(window->handle);
+    //    glfwSwapBuffers(window->handle);
         glfwPollEvents();
         if(glfwWindowShouldClose(window->handle)) {
             return false;

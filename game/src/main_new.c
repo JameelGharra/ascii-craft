@@ -20,6 +20,13 @@
 #include "world_query.h"
 #include "time.h"
 #include "game_clock.h"
+#include <GLFW/glfw3.h>
+
+#define ASCII_MODE
+
+#ifdef ASCII_MODE
+#include "ascii_renderer.h"
+#endif
 
 #define MAX_PATH_LENGTH 256
 
@@ -36,6 +43,9 @@ typedef struct
     char db_path[MAX_PATH_LENGTH];
     int day_length;
     int time_changed;
+    #ifdef ASCII_MODE
+        AsciiRenderer *ascii_renderer;
+    #endif
 } Model;
 
 static Model model;
@@ -264,6 +274,18 @@ int initialize_main_game_core() {
     if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager) {
         return 0;
     }
+
+    #ifdef ASCII_MODE
+        AsciiConfig config = {
+            .ascii_width = 150,
+            .ascii_height = 40,
+            .source_width = WINDOW_WIDTH,
+            .source_height = WINDOW_HEIGHT
+        };
+        g->ascii_renderer = ascii_renderer_create(&config);
+
+    #endif
+
     return 1;
 }
 void destroy_main_game_core() {
@@ -378,6 +400,9 @@ int main(int argc, char **argv)
     while (true) {
         // printf("Frame number: %u\n", frames++);
         // WINDOW SIZE, SCALE AND CLEAR CANVAS //
+        #ifdef ASCII_MODE
+            ascii_renderer_bind_offscreen_buffer(g->ascii_renderer);
+        #endif
         renderer_begin_frame(g->renderer);
 
         // FRAME RATE //
@@ -424,6 +449,7 @@ int main(int argc, char **argv)
         // printf("Chunks rendered \n");
         proceed_render_signs(&view);
         // printf("Signs rendered \n");
+
         if (SHOW_WIREFRAME) {
             proceed_render_wireframe(&view, world_query);
         }
@@ -437,6 +463,10 @@ int main(int argc, char **argv)
             proceed_render_item(&view);
         }
         // SWAP AND POLL //
+        #ifdef ASCII_MODE
+            ascii_renderer_read_pixels(g->ascii_renderer);
+            ascii_renderer_render_to_terminal(g->ascii_renderer);
+        #endif
         if(!window_next_frame(g->window)) {
             break;
         }
@@ -450,6 +480,9 @@ int main(int argc, char **argv)
     chunk_manager_destroy(g->chunk_manager, g->renderer);
     input_manager_free(g->input_manager);
     renderer_destroy(&g->renderer);
+    #ifdef ASCII_MODE
+        ascii_renderer_destroy(&g->ascii_renderer);
+    #endif
     window_free(g->window);
     window_terminate();
     return 0;

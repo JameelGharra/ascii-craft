@@ -1,17 +1,27 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "input_manager.h"
 #include "queue.h"
 #include "config.h"
+#include "tinycthread.h"
 
 struct InputManager {
     Queue *command_queue;
+    #if ASCII_MODE
+        thrd_t stdin_thrd;
+    #endif
 };
+
+#define MAX_STDIN_BUFFER 128 // using text as cmds from server
 
 // INTERNAL HELPERS //
 static bool _construct_key_command(Window *window, WindowEvent *event, GameCommand *command);
 static void _construct_scroll_command(WindowEvent *event, GameCommand *command);
 static bool _construct_mouse_button_command(Window *window, WindowEvent *event, GameCommand *command);
+#if ASCII_MODE
+    static int _stdin_thread_run(void *arg);
+#endif
 // ========
 
 void input_manager_update(InputManager *manager, Window *window) {
@@ -70,8 +80,37 @@ InputManager *input_manager_create() {
         free(manager);
         return NULL;
     }
+    #if ASCII_MODE
+        if(thrd_create(&manager->stdin_thrd, _stdin_thread_run, manager) == thrd_success) {
+            thrd_detach(manager->stdin_thrd); // If I need to join the thread later, I won't detach it here
+        }
+    #endif
     return manager;
 }
+#if ASCII_MODE
+static int _stdin_thread_run(void *arg) {
+    InputManager *manager = (InputManager *)arg;
+    char buffer[MAX_STDIN_BUFFER];
+    while (fgets(buffer, sizeof(buffer), stdin)) {
+        GameCommand *command = (GameCommand *)malloc(sizeof(GameCommand));
+        if(!command) {
+            continue;
+        }
+        if(strncmp(buffer, PROTOCOL_CMD_BUILD, strlen(PROTOCOL_CMD_BUILD)) == 0) {
+            command->type = COMMAND_BUILD;
+        } else if(strncmp(buffer, PROTOCOL_CMD_DESTROY, strlen(PROTOCOL_CMD_DESTROY)) == 0) {
+            command->type = COMMAND_DESTROY;
+        } else if(strncmp(buffer, PROTOCOL_CMD_FLY, strlen(PROTOCOL_CMD_FLY)) == 0) {
+            command->type = COMMAND_TOGGLE_FLY;
+        } else {
+            free(command);
+            continue;
+        }
+        queue_enqueue(manager->command_queue, command);
+    }
+    return 0;
+}
+#endif
 void input_manager_free(InputManager *manager) {
     if(manager) {
         if(manager->command_queue) {

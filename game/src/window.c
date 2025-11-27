@@ -55,6 +55,9 @@ Window *window_create(int width, int height, const char* title, int fullscreen) 
     if(!window) {
         return NULL;
     }
+    #if ASCII_MODE
+        glfwWindowHint(GLFW_VISIBLE, 0);
+    #endif
     window->handle = glfwCreateWindow(
         window_width, window_height, title, monitor, NULL);
     if(window->handle == NULL) {
@@ -155,7 +158,9 @@ void window_get_cursor_pos(Window *window, double *xpos, double *ypos) {
 }
 bool window_next_frame(Window *window) {
     if (window && window->handle) {
-    //    glfwSwapBuffers(window->handle);
+        #if !ASCII_MODE
+            glfwSwapBuffers(window->handle);
+        #endif
         glfwPollEvents();
         if(glfwWindowShouldClose(window->handle)) {
             return false;

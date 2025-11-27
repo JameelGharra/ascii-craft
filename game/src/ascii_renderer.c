@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "time.h"
 
-static const char* ASCII_PALETTE = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+static const char *ASCII_PALETTE = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 static const int PALETTE_COUNT = 70; // did not include \0 in this count
 
 struct AsciiRenderer {
@@ -18,8 +18,8 @@ struct AsciiRenderer {
     GLuint depth_buffer_handle;
 
     // CPU-side buffers (allocated once, reused every frame)
-    unsigned char* pixel_buffer; // the high-res pixels read from the GPU
-    char* frame_buffer;          // the final low-res ASCII string
+    unsigned char *pixel_buffer; // the high-res pixels read from the GPU
+    char *frame_buffer;          // the final low-res ASCII string
     size_t frame_buffer_size;
 
     // For performance stats
@@ -28,8 +28,8 @@ struct AsciiRenderer {
     double fps;
 };
 
-AsciiRenderer* ascii_renderer_create(const AsciiConfig* config) {
-    AsciiRenderer* renderer = (AsciiRenderer*)malloc(sizeof(AsciiRenderer));
+AsciiRenderer* ascii_renderer_create(const AsciiConfig *config) {
+    AsciiRenderer *renderer = (AsciiRenderer*)malloc(sizeof(AsciiRenderer));
     if (!renderer) return NULL;
 
     renderer->config = *config;
@@ -74,7 +74,7 @@ AsciiRenderer* ascii_renderer_create(const AsciiConfig* config) {
     return renderer;
 }
 
-void ascii_renderer_destroy(AsciiRenderer** renderer_ptr) {
+void ascii_renderer_destroy(AsciiRenderer **renderer_ptr) {
     if (!renderer_ptr || !*renderer_ptr) return;
     AsciiRenderer* renderer = *renderer_ptr;
 
@@ -103,8 +103,9 @@ void ascii_renderer_read_pixels(AsciiRenderer *renderer) {
 
 void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
 
+    fprintf(stdout, ":::FRAME_START:::\n");
     double start_time = time_get_seconds();
-    char* buf_ptr = renderer->frame_buffer;
+    char *buf_ptr = renderer->frame_buffer;
     uint32_t last_color = 0xFFFFFFFF; // Impossible color to force first write
 
     // Scaling factors
@@ -160,14 +161,13 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
         }
         *buf_ptr++ = '\n';
     }
-    // Add reset code at the end
+    // reset code at the end (to get normal terminal colors back)
     buf_ptr += sprintf(buf_ptr, "\033[0m");
 
-    // Write the entire buffer in one go
-    fputs(renderer->frame_buffer, stdout);
+    fputs(renderer->frame_buffer, stdout); // printed the whole frame at once
+    fprintf(stdout, "\n:::FRAME_END:::\n");
     fflush(stdout);
 
-    // --- Update Stats ---
     double end_time = time_get_seconds();
     renderer->conversion_time_ms = (end_time - start_time) * 1000.0;
     

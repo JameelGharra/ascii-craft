@@ -6,8 +6,11 @@
 // app parameters
 #define DEBUG 0
 #define FULLSCREEN 0
-#define WINDOW_WIDTH 320
+#define WINDOW_WIDTH 320 // I figured for here 320x240 is not bad but we downscale for ASCII anyway
 #define WINDOW_HEIGHT 240
+#define ASCII_MODE 1
+#define ASCII_WINDOW_WIDTH 150
+#define ASCII_WINDOW_HEIGHT 40
 #define WINDOW_NAME "Craft"
 #define VSYNC 0
 #define SCROLL_THRESHOLD 0.1
@@ -55,9 +58,14 @@
 #define CHUNK_SIZE 32
 #define COMMIT_INTERVAL 5
 
-// Maxs
+// maxs
 #define MAX_PLAYERS 128
 #define MAX_NAME_LENGTH 32
 #define MAX_CHUNKS 8192
+
+// protocol go server to/from client networking commands
+#define PROTOCOL_CMD_BUILD "build"
+#define PROTOCOL_CMD_DESTROY "destroy"
+#define PROTOCOL_CMD_FLY "toggle_fly"
 
 #endif

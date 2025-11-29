@@ -17,6 +17,7 @@
 #include "world_query.h"
 #include "time.h"
 #include "game_clock.h"
+#include "ipc.h"
 
 #if ASCII_MODE
 #include "ascii_renderer.h"
@@ -264,11 +265,6 @@ int initialize_main_game_core() {
         .delete_radius = DELETE_CHUNK_RADIUS,
         .sign_radius = RENDER_SIGN_RADIUS,
     });
-    g->input_manager = input_manager_create(g->window);
-    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager) {
-        return 0;
-    }
-
     #if ASCII_MODE
         AsciiConfig config = {
             .ascii_width = ASCII_WINDOW_WIDTH,
@@ -277,7 +273,13 @@ int initialize_main_game_core() {
             .source_height = WINDOW_HEIGHT
         };
         g->ascii_renderer = ascii_renderer_create(&config);
+        ipc_create();
     #endif
+    g->input_manager = input_manager_create(g->window);
+    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager || !g->ascii_renderer) {
+        return 0;
+    }
+
 
     return 1;
 }
@@ -475,6 +477,7 @@ int main(int argc, char **argv)
     renderer_destroy(&g->renderer);
     #if ASCII_MODE
         ascii_renderer_destroy(&g->ascii_renderer);
+        ipc_destroy();
     #endif
     window_free(g->window);
     window_terminate();

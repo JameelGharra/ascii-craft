@@ -11,6 +11,7 @@
 #define ASCII_MODE 1
 #define ASCII_WINDOW_WIDTH 150
 #define ASCII_WINDOW_HEIGHT 40
+#define ASCII_LOCAL_PRINT 0 // if 1 then it prints locally on the terminal (mainly debug mode)
 #define WINDOW_NAME "Craft"
 #define VSYNC 0
 #define SCROLL_THRESHOLD 0.1

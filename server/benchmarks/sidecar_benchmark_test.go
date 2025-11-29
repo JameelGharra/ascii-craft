@@ -1,4 +1,4 @@
-package main
+package benchmarks
 
 import (
 	"bufio"
@@ -9,11 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 	"time"
-)
-
-const (
-	BinaryPath = "../../game/craft.exe" // Adjust extension for Linux if needed
 )
 
 // FrameStats holds metrics for a single frame
@@ -23,7 +20,7 @@ type FrameStats struct {
 	TransportTime time.Duration // Time spent inside the pipe/buffers
 }
 
-func main() {
+func BenchmarkSideCar(B *testing.B) {
 	// 1. Setup Command
 	abs, err := filepath.Abs(BinaryPath)
 	if err != nil {

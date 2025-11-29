@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdint.h>
 #include "time.h"
+#include "config.h"
+#include "ipc.h"
 
 static const char *ASCII_PALETTE = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 static const int PALETTE_COUNT = 70; // did not include \0 in this count
@@ -37,8 +39,8 @@ AsciiRenderer* ascii_renderer_create(const AsciiConfig *config) {
     size_t pixel_buffer_size = config->source_width * config->source_height * 3; // RGB
     renderer->pixel_buffer = (unsigned char*)malloc(pixel_buffer_size);
     
-    // Generous estimate for the frame buffer size
-    // (Max ANSI color code len + 1 char) * num_chars + num_newlines + reset code + null terminator
+    // generous estimate for the frame buffer size
+    // (max ANSI color code len + 1 char) * num_chars + num_newlines + reset code + null terminator
     renderer->frame_buffer_size = (19 + 1) * config->ascii_width * config->ascii_height + config->ascii_height + 5;
     renderer->frame_buffer = (char*)malloc(renderer->frame_buffer_size);
 
@@ -47,7 +49,7 @@ AsciiRenderer* ascii_renderer_create(const AsciiConfig *config) {
 
     glGenTextures(1, &renderer->texture_handle);
     glBindTexture(GL_TEXTURE_2D, renderer->texture_handle);
-    // Last param NULL allocates empty texture and not upload anything from CPU
+    // last param NULL allocates empty texture and not upload anything from CPU
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, config->source_width, config->source_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -95,7 +97,7 @@ void ascii_renderer_bind_offscreen_buffer(AsciiRenderer *renderer) {
 }
 
 void ascii_renderer_read_pixels(AsciiRenderer *renderer) {
-    // Set alignment to 1 to avoid issues with widths that aren't multiples of 4
+    // set alignment to 1 to avoid issues with widths that aren't multiples of 4
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, renderer->config.source_width, renderer->config.source_height, GL_RGB, GL_UNSIGNED_BYTE, renderer->pixel_buffer);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -103,12 +105,14 @@ void ascii_renderer_read_pixels(AsciiRenderer *renderer) {
 
 void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
 
-    fprintf(stdout, ":::FRAME_START:::\n");
+    #if ASCII_LOCAL_PRINT
+        fprintf(stdout, ":::FRAME_START:::\n");
+    #endif
     double start_time = time_get_seconds();
     char *buf_ptr = renderer->frame_buffer;
-    uint32_t last_color = 0xFFFFFFFF; // Impossible color to force first write
+    uint32_t last_color = 0xFFFFFFFF; // impossible color to force first write
 
-    // Scaling factors
+    // scaling factors
     const float block_width = (float)renderer->config.source_width / renderer->config.ascii_width;
     const float block_height = (float)renderer->config.source_height / renderer->config.ascii_height;
     
@@ -117,7 +121,7 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
     for (int y = 0; y < renderer->config.ascii_height; ++y) {
         for (int x = 0; x < renderer->config.ascii_width; ++x) {
             
-            // Block averaging
+            // block averaging
             int start_py = (int)(y * block_height);
             int end_py = (int)((y + 1) * block_height);
             int start_px = (int)(x * block_width);
@@ -142,14 +146,14 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
                 unsigned char g = total_g / pixel_count;
                 unsigned char b = total_b / pixel_count;
 
-                // Stateful color optimization
+                // stateful color optimization
                 uint32_t current_color = (r << 16) | (g << 8) | b;
                 if (current_color != last_color) {
                     buf_ptr += sprintf(buf_ptr, "\033[38;2;%d;%d;%dm", r, g, b);
                     last_color = current_color;
                 }
 
-                // Weighted brightness for more perceptually accurate luminance
+                // weighted brightness for more perceptually accurate luminance
                 float brightness = (0.2126f * r + 0.7152f * g + 0.0722f * b);
                 int palette_index = (int)((brightness / 255.0f) * (PALETTE_COUNT - 1));
                 *buf_ptr++ = ASCII_PALETTE[palette_index];
@@ -164,9 +168,18 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
     // reset code at the end (to get normal terminal colors back)
     buf_ptr += sprintf(buf_ptr, "\033[0m");
 
-    fputs(renderer->frame_buffer, stdout); // printed the whole frame at once
-    fprintf(stdout, "\n:::FRAME_END:::\n");
-    fflush(stdout);
+    uint32_t length = (uint32_t) (buf_ptr - renderer->frame_buffer);
+    ipc_write_frame(
+        (uint8_t*)renderer->frame_buffer,
+        length,
+        renderer->config.ascii_width,
+        renderer->config.ascii_height
+    );
+    #if ASCII_LOCAL_PRINT
+        fputs(renderer->frame_buffer, stdout);
+        fprintf(stdout, "\n:::FRAME_END:::\n");
+        fflush(stdout);
+    #endif
 
     double end_time = time_get_seconds();
     renderer->conversion_time_ms = (end_time - start_time) * 1000.0;

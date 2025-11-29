@@ -5,7 +5,11 @@
 #include <stdbool.h>
 
 #define SHM_SIZE (1024  * 1024 * 4) // ~ 4 MB (I did this to be suited for 4K resolution ASCII - which will never gonna happen)
-#define SHM_NAME "local\\CraftSharedMemory"
+#if defined _WIN32
+    #define SHM_NAME "Local\\CraftSharedMemory"
+#else
+    #define SHM_NAME "/craft_shared_memory"
+#endif
 
 typedef struct {
     // the writer increments the seq, if odd then writing in progress, if even -> data is ready, if changed while reading then reader retries

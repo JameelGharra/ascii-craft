@@ -7,8 +7,27 @@ static SharedMemoryLayout *shm_ptr = NULL;
 
 #ifdef _WIN32
     #include <windows.h>
+    
     static HANDLE hMapFile;
 
+    static void print_last_error(const char *msg) {
+        DWORD err = GetLastError();
+        LPVOID lpMsgBuf;
+
+        FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER |
+            FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+            NULL,
+            err,
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            (LPSTR)&lpMsgBuf,
+            0, NULL );
+
+        fprintf(stderr, "%s (%lu): %s\n", msg, err, (char*)lpMsgBuf);
+
+        LocalFree(lpMsgBuf);
+    }
     void ipc_create() {
         hMapFile = CreateFileMappingA(
             INVALID_HANDLE_VALUE,    // use paging file
@@ -19,18 +38,18 @@ static SharedMemoryLayout *shm_ptr = NULL;
             SHM_NAME                 // name of mapping object
         );
         if(hMapFile == NULL) {
-            fprintf(stderr, "Could not create file mapping object (%lu).\n", GetLastError());
+            print_last_error("Could not create file mapping object");
             return ;
         }
         shm_ptr = (SharedMemoryLayout*) MapViewOfFile(
             hMapFile,
-            FILE_MAP_ALL_ACCESS, // read/write permission
+            FILE_MAP_ALL_ACCESS, // read/write perm
             0,
             0,
             SHM_SIZE
         );
         if(shm_ptr == NULL) {
-            fprintf(stderr, "Could not map view of file (%lu).\n", GetLastError());
+            print_last_error("Could not map view of file");
             CloseHandle(hMapFile);
             hMapFile = NULL;
             return ;
@@ -60,13 +79,13 @@ static SharedMemoryLayout *shm_ptr = NULL;
     int shm_fd = -1;
 
     void ipc_create() {
-        shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+        shm_fd = shm,_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
         if (shm_fd == -1) {
             fprintf(stderr, "Could not open shared memory object '%s' (%d): %s\n",
                     SHM_NAME, errno, strerror(errno));
             return;
         }
-        if (ftruncate(shm_fd, SHM_SIZE) == -1) {
+        if (ftruncate(shm_fd SHM_SIZE) == -1) {
             fprintf(stderr, "Could not set size for shared memory '%s' (%d): %s\n",
                     SHM_NAME, errno, strerror(errno));
             close(shm_fd);
@@ -103,3 +122,19 @@ static SharedMemoryLayout *shm_ptr = NULL;
     }
 
 #endif
+
+void ipc_write_frame(uint8_t *buffer, uint32_t len, uint32_t w, uint32_t h) {
+    if(!shm_ptr) {
+        return ;
+    }
+    uint32_t max_payload = SHM_SIZE - sizeof(SharedMemoryLayout);
+    if(len > max_payload) {
+        len = max_payload;
+    }
+    __sync_fetch_and_add(&shm_ptr->frame_seq, 1);
+    shm_ptr->width = w;
+    shm_ptr->height = h;
+    shm_ptr->data_len = len;
+    memcpy(shm_ptr->data, buffer, len);
+    __sync_fetch_and_add(&shm_ptr->frame_seq, 1); // finished writing
+}

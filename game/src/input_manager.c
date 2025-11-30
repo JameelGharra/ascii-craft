@@ -4,23 +4,18 @@
 #include "input_manager.h"
 #include "queue.h"
 #include "config.h"
-#include "tinycthread.h"
+#include "ipc.h"
 
 struct InputManager {
     Queue *command_queue;
-    #if ASCII_MODE
-        thrd_t stdin_thrd;
-    #endif
 };
-
-#define MAX_STDIN_BUFFER 128 // using text as cmds from server
 
 // INTERNAL HELPERS //
 static bool _construct_key_command(Window *window, WindowEvent *event, GameCommand *command);
 static void _construct_scroll_command(WindowEvent *event, GameCommand *command);
 static bool _construct_mouse_button_command(Window *window, WindowEvent *event, GameCommand *command);
 #if ASCII_MODE
-    static int _stdin_thread_run(void *arg);
+    static void _process_ipc_commands(InputManager *manager);
 #endif
 // ========
 
@@ -28,6 +23,9 @@ void input_manager_update(InputManager *manager, Window *window) {
     if(!manager || !window) {
         return ;
     }
+    #if ASCII_MODE
+        _process_ipc_commands(manager);
+    #endif
     WindowEvent event;
     while(window_poll_event(window, &event)) {
         GameCommand *command = (GameCommand *)malloc(sizeof(GameCommand));
@@ -80,37 +78,8 @@ InputManager *input_manager_create() {
         free(manager);
         return NULL;
     }
-    #if ASCII_MODE
-        if(thrd_create(&manager->stdin_thrd, _stdin_thread_run, manager) == thrd_success) {
-            thrd_detach(manager->stdin_thrd); // If I need to join the thread later, I won't detach it here
-        }
-    #endif
     return manager;
 }
-#if ASCII_MODE
-static int _stdin_thread_run(void *arg) {
-    InputManager *manager = (InputManager *)arg;
-    char buffer[MAX_STDIN_BUFFER];
-    while (fgets(buffer, sizeof(buffer), stdin)) {
-        GameCommand *command = (GameCommand *)malloc(sizeof(GameCommand));
-        if(!command) {
-            continue;
-        }
-        if(strncmp(buffer, PROTOCOL_CMD_BUILD, strlen(PROTOCOL_CMD_BUILD)) == 0) {
-            command->type = COMMAND_BUILD;
-        } else if(strncmp(buffer, PROTOCOL_CMD_DESTROY, strlen(PROTOCOL_CMD_DESTROY)) == 0) {
-            command->type = COMMAND_DESTROY;
-        } else if(strncmp(buffer, PROTOCOL_CMD_FLY, strlen(PROTOCOL_CMD_FLY)) == 0) {
-            command->type = COMMAND_TOGGLE_FLY;
-        } else {
-            free(command);
-            continue;
-        }
-        queue_enqueue(manager->command_queue, command);
-    }
-    return 0;
-}
-#endif
 void input_manager_free(InputManager *manager) {
     if(manager) {
         if(manager->command_queue) {
@@ -208,3 +177,53 @@ static bool _construct_mouse_button_command(Window *window, WindowEvent *event, 
     }
     return false;
 }
+#if ASCII_MODE
+static void _process_ipc_commands(InputManager *manager) {
+    IPCCommandEntry ipc_cmd;
+    while(ipc_read_command(&ipc_cmd)) {
+        GameCommand *game_cmd = (GameCommand*)malloc(sizeof(GameCommand));
+        if(!game_cmd) {
+            continue; // for now on failure, it will loop forever and freeze main thread
+        }
+        bool valid = true;
+        switch(ipc_cmd.type) {
+            case IPC_CMD_BACKWARD: case IPC_CMD_FORWARD: case IPC_CMD_LEFT: case IPC_CMD_RIGHT: {
+                // im planning to simulate press duration since currently the input sys is continuous events-based
+                break;
+            }
+            case IPC_CMD_FLY: {
+                game_cmd->type = COMMAND_TOGGLE_FLY;
+                break;
+            }
+            case IPC_CMD_BUILD: {
+                game_cmd->type = COMMAND_BUILD;
+                break;
+            }
+            case IPC_CMD_DESTROY: {
+                game_cmd->type = COMMAND_DESTROY;
+                break;
+            }
+            case IPC_CMD_SELECT_SLOT: {
+                int index = ipc_cmd.value - 1;
+                if(index >=0 && index < 9) {
+                    game_cmd->type = COMMAND_SET_ITEM_INDEX;
+                    game_cmd->data.set_item.index = index;
+                } else {
+                    valid = false;
+                }
+                break;
+            }
+            default: {
+                valid = false;
+            }
+        }
+        if(valid) {
+            queue_enqueue(manager->command_queue, game_cmd);
+
+        }
+        else {
+            free(game_cmd);
+        }
+    }
+}
+#endif

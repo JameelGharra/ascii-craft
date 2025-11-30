@@ -1,25 +1,26 @@
-package benchmarks
+package main
 
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"syscall"
-	"testing"
 	"time"
 	"unsafe"
 )
 
 const (
-	ShmName = "Local\\CraftSharedMemory"
-	// Must match C header!
+	// Adjust path relative to where you run this file
+	BinaryPath    = "../../../game/craft.exe"
+	ShmName       = "Local\\CraftSharedMemory"
 	ShmSize       = 1024 * 1024 * 4
 	CmdBufferSize = 256
 )
 
-// Matches C struct layout exactly
+// Matches C struct layout
 type SharedMemoryLayout struct {
 	FrameSeq uint32
 	Width    uint32
@@ -27,36 +28,38 @@ type SharedMemoryLayout struct {
 	DataLen  uint32
 	CmdHead  uint32
 	CmdTail  uint32
-	// Data follows immediately after
 }
 
 type IPCCommandEntry struct {
 	Type  uint32
-	Value uint32
+	Value int32 // Changed to int32 to match C
 }
 
 const (
-	CmdNone       = 0
-	CmdForward    = 1
-	CmdBackward   = 2
-	CmdLeft       = 3
-	CmdRight      = 4
-	CmdJump       = 5
-	CmdFly        = 6
-	CmdBuild      = 7
-	CmdDestroy    = 8
 	CmdSelectSlot = 9
 )
 
-func BenchmarkIPC(b *testing.B) {
+func main() {
 	// 1. Start C Binary
-	abs, _ := filepath.Abs(BinaryPath)
+	abs, err := filepath.Abs(BinaryPath)
+	if err != nil {
+		log.Fatalf("Path error: %v", err)
+	}
+
 	cmd := exec.Command(abs)
-	cmd.Dir = "../../game/"
+	cmd.Dir = filepath.Dir(abs) // Run in the game directory
+	// Redirect Stderr so we see C errors if they happen
+	cmd.Stderr = os.Stderr
+
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
-	defer cmd.Process.Kill()
+
+	// Ensure we kill the C process when Go exits
+	defer func() {
+		fmt.Println("Stopping C process...")
+		cmd.Process.Kill()
+	}()
 
 	fmt.Println("Starting C process...")
 	time.Sleep(1 * time.Second) // Wait for C to init SHM
@@ -66,69 +69,82 @@ func BenchmarkIPC(b *testing.B) {
 	procOpenFileMapping := kernel32.NewProc("OpenFileMappingA")
 	procMapViewOfFile := kernel32.NewProc("MapViewOfFile")
 
-	const FILE_MAP_READ = 0x0004
+	const FILE_MAP_ALL_ACCESS = 0xF001F // Need Write access to send commands!
 	namePtr, _ := syscall.BytePtrFromString(ShmName)
 
-	hMapFile, _, err := procOpenFileMapping.Call(
-		uintptr(FILE_MAP_READ),
+	hMapFile, _, _ := procOpenFileMapping.Call(
+		uintptr(FILE_MAP_ALL_ACCESS),
 		0,
 		uintptr(unsafe.Pointer(namePtr)),
 	)
 	if hMapFile == 0 {
-		log.Fatalf("Could not open shared memory: %v", err)
+		log.Fatal("Could not open shared memory. Is craft.exe running?")
 	}
 
-	addr, _, err := procMapViewOfFile.Call(
+	addr, _, _ := procMapViewOfFile.Call(
 		hMapFile,
-		uintptr(FILE_MAP_READ),
+		uintptr(FILE_MAP_ALL_ACCESS),
 		0, 0, 0,
 	)
 	if addr == 0 {
 		log.Fatal("MapViewOfFile failed")
 	}
 
+	// 3. Setup Pointers
 	shm := (*SharedMemoryLayout)(unsafe.Pointer(addr))
 	const HeaderSize = 24
 	const CmdEntrySize = 8
-	CmdArrayPtr := addr + HeaderSize
+
+	cmdArrayPtr := addr + HeaderSize
 	dataPtr := addr + HeaderSize + (CmdBufferSize * CmdEntrySize)
 
-	fmt.Println("--- STARTING IPC BENCHMARK ---")
+	fmt.Println("--- STARTING IPC STRESS TEST ---")
 
 	lastSeq := uint32(0)
 	frameCount := 0
 	startBench := time.Now()
+	latencies := make([]float64, 0, 10000)
 
-	var latencies []float64
-	var itemSelection int = 0
+	// 4. Background Command Sender (The "Stress" part)
+	done := make(chan bool)
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(500 * time.Millisecond) // Fast switching
+		defer ticker.Stop()
+		itemSelection := 0
 
-		for range ticker.C {
-			itemSelection = (itemSelection + 1) % 10
-			fmt.Printf("Sending a selection item command with %d\n", itemSelection)
-			tail := *(*uint32)(unsafe.Pointer(&shm.CmdTail))
-			idx := tail % CmdBufferSize
-			entryAddr := CmdArrayPtr + uintptr(idx*CmdEntrySize)
+		for {
+			select {
+			case <-done:
+				return // Stop cleanly
+			case <-ticker.C:
+				// Logic to change items
+				itemSelection = (itemSelection + 1) % 9
 
-			entry := (*IPCCommandEntry)(unsafe.Pointer(entryAddr))
-			entry.Type = CmdSelectSlot
-			entry.Value = uint32(itemSelection)
+				// Write to Ring Buffer
+				tail := *(*uint32)(unsafe.Pointer(&shm.CmdTail))
+				idx := tail % CmdBufferSize
+				entryAddr := cmdArrayPtr + uintptr(idx*CmdEntrySize)
+
+				entry := (*IPCCommandEntry)(unsafe.Pointer(entryAddr))
+				entry.Type = CmdSelectSlot
+				entry.Value = int32(itemSelection + 1) // Slots 1-9
+
+				// Increment Tail (Signal C)
+				*(*uint32)(unsafe.Pointer(&shm.CmdTail)) = tail + 1
+			}
 		}
-		*(*uint32)(unsafe.Pointer(&shm.CmdTail)) += 1
 	}()
+
+	// 5. Main Reader Loop
 	for {
 		currSeq := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
 
 		if currSeq > lastSeq && currSeq%2 == 0 {
-
-			// --- MEASUREMENT START ---
 			readStart := time.Now()
 
-			// 1. Read Metadata
 			dataLen := *(*uint32)(unsafe.Pointer(&shm.DataLen))
 
-			// 2. Construct Go Slice (Zero Copy)
+			// Zero-copy read
 			var _ []byte
 			sliceHeader := struct {
 				Addr uintptr
@@ -136,25 +152,13 @@ func BenchmarkIPC(b *testing.B) {
 				Cap  int
 			}{dataPtr, int(dataLen), int(dataLen)}
 			shmSlice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
-
-			// Printing every 60 divisible frame for visual verification
 			if frameCount%60 == 0 {
-				// Clear terminal (optional, helps visibility)
 				fmt.Print("\033[H\033[2J")
-
-				fmt.Println("--- VERIFYING FRAME DATA (Frame #60) ---")
 				// Convert bytes to string and print.
 				// Since it contains ANSI codes, your terminal should render colors!
 				fmt.Println(string(shmSlice))
-				fmt.Println("\n--- END OF FRAME ---")
-
-				// Optional: Exit after verification so you can look at it
-				// return
 			}
-			// --- MEASUREMENT END ---
 			lat := time.Since(readStart)
-
-			// CRITICAL FIX: Use Nanoseconds (float64) to prevent truncation to 0
 			latencies = append(latencies, float64(lat.Nanoseconds()))
 
 			lastSeq = currSeq
@@ -165,19 +169,22 @@ func BenchmarkIPC(b *testing.B) {
 			}
 		}
 
+		// Run for exactly 10 seconds
 		if time.Since(startBench) > 10*time.Second {
 			break
 		}
 
-		// Busy wait for high precision benchmark
-		// (removes sleep jitter from the equation)
+		// Busy wait for precision
 		for i := 0; i < 100; i++ {
 		}
 	}
 
-	fmt.Println("\n\n--- BENCHMARK RESULTS (IPC/SharedMem) ---")
+	// 6. Cleanup
+	close(done) // Tell the background thread to stop
+	fmt.Println("\n\n--- RESULTS ---")
 	printIPCStats(frameCount, latencies)
 }
+
 func printIPCStats(count int, times []float64) {
 	if count == 0 {
 		fmt.Println("No frames detected.")
@@ -201,18 +208,4 @@ func printIPCStats(count int, times []float64) {
 	fmt.Printf("Read Latency P99:     %.2f ns  (%.4f µs)\n", p99Ns, p99Ns/1000.0)
 	fmt.Printf("Read Latency Max:     %.2f ns  (%.4f µs)\n", times[len(times)-1], times[len(times)-1]/1000.0)
 	fmt.Println("-------------------------------------------------")
-
-	// Previous Pipe result for comparison
-	pipeP99Us := 2888.0
-	ipcP99Us := p99Ns / 1000.0
-
-	// Prevent division by zero in print
-	if ipcP99Us < 0.0001 {
-		ipcP99Us = 0.0001
-	}
-
-	fmt.Println("Comparison (P99):")
-	fmt.Printf("Pipe: ~%.2f µs\n", pipeP99Us)
-	fmt.Printf("IPC:  ~%.4f µs\n", ipcP99Us)
-	fmt.Printf("Speedup: %.0fx Faster\n", pipeP99Us/ipcP99Us)
 }

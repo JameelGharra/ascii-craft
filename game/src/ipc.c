@@ -32,10 +32,10 @@ static SharedMemoryLayout *shm_ptr = NULL;
         hMapFile = CreateFileMappingA(
             INVALID_HANDLE_VALUE,    // use paging file
             NULL,                    // default security
-            PAGE_READWRITE,          // read/write access
+            PAGE_READWRITE,          // for access
             0,                       // maximum object size (high-order DWORD)
             SHM_SIZE,                // maximum object size (low-order DWORD)
-            SHM_NAME                 // name of mapping object
+            SHM_NAME
         );
         if(hMapFile == NULL) {
             print_last_error("Could not create file mapping object");
@@ -58,6 +58,9 @@ static SharedMemoryLayout *shm_ptr = NULL;
         shm_ptr->width = 0;
         shm_ptr->height = 0;
         shm_ptr->data_len = 0;
+        shm_ptr->cmd_head = 0;
+        shm_ptr->cmd_tail = 0;
+        memset(shm_ptr->commands, 0, sizeof(shm_ptr->commands));
     }
     void ipc_destroy() {
         if(shm_ptr) {
@@ -137,4 +140,19 @@ void ipc_write_frame(uint8_t *buffer, uint32_t len, uint32_t w, uint32_t h) {
     shm_ptr->data_len = len;
     memcpy(shm_ptr->data, buffer, len);
     __sync_fetch_and_add(&shm_ptr->frame_seq, 1); // finished writing
+}
+
+bool ipc_read_command(IPCCommandEntry *out_cmd) {
+    if(!shm_ptr || !out_cmd) {
+        return false;
+    }
+    uint32_t head = shm_ptr->cmd_head;
+    uint32_t tail = shm_ptr->cmd_tail;
+    
+    if(head == tail) { // emptiness
+        return false;
+    }
+    *out_cmd = shm_ptr->commands[head % IPC_CMD_BUFFER_SIZE];
+    shm_ptr->cmd_head = head + 1;
+    return true;
 }

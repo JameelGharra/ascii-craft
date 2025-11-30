@@ -300,6 +300,10 @@ void destroy_main_game_core() {
         window_free(g->window);
         g->window = NULL;
     }
+    #if ASCII_MODE
+        ascii_renderer_destroy(&g->ascii_renderer);
+        ipc_destroy();
+    #endif
     window_terminate();
 }
 void handle_commands(const WorldQuery *world_query) {

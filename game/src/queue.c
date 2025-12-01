@@ -1,5 +1,6 @@
-#include "queue.h"
 #include <stdlib.h>
+#include "queue.h"
+#include "tinycthread.h"
 
 struct QueueNode {
     void *item;
@@ -11,6 +12,7 @@ struct Queue {
     QueueNode *front;
     QueueNode *rear;
     int size;
+    mtx_t mtx;
 };
 
 Queue *queue_create() {
@@ -21,6 +23,7 @@ Queue *queue_create() {
     queue->front = NULL;
     queue->rear = NULL;
     queue->size = 0;
+    mtx_init(&queue->mtx, mtx_plain);
     return queue;
 }
 
@@ -31,6 +34,7 @@ void queue_destroy(Queue *queue) {
             queue->front = queue->front->next;
             free(temp);
         }
+        mtx_destroy(&queue->mtx);
         free(queue);
     }
 }
@@ -42,6 +46,7 @@ void queue_enqueue(Queue *queue, void *item) {
     if (!new_node) {
         return;
     }
+    mtx_lock(&queue->mtx);
     new_node->item = item;
     new_node->next = NULL;
     if (queue->rear) {
@@ -51,9 +56,12 @@ void queue_enqueue(Queue *queue, void *item) {
     }
     queue->rear = new_node;
     queue->size++;
+    mtx_unlock(&queue->mtx);
 }
 void *queue_dequeue(Queue *queue) {
+    mtx_lock(&queue->mtx);
     if (!queue || !queue->front) {
+        mtx_unlock(&queue->mtx);
         return NULL;
     }
     QueueNode *temp = queue->front;
@@ -64,11 +72,20 @@ void *queue_dequeue(Queue *queue) {
     }
     free(temp);
     queue->size--;
+    mtx_unlock(&queue->mtx);
+    
     return item;
 }
 bool queue_is_empty(Queue *queue) {
-    return !queue || queue->size == 0;
+    if (!queue) {
+        return true;
+    }
+    return queue->size == 0;
 }
 int queue_get_size(Queue *queue) {
-    return queue ? queue->size : 0;
+    if (!queue) {
+        return 0;
+    }
+    int size = queue->size;
+    return size;
 }

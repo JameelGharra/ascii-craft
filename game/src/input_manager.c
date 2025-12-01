@@ -1,8 +1,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "input_manager.h"
 #include "queue.h"
 #include "config.h"
+#include "ipc.h"
 
 struct InputManager {
     Queue *command_queue;
@@ -12,12 +14,18 @@ struct InputManager {
 static bool _construct_key_command(Window *window, WindowEvent *event, GameCommand *command);
 static void _construct_scroll_command(WindowEvent *event, GameCommand *command);
 static bool _construct_mouse_button_command(Window *window, WindowEvent *event, GameCommand *command);
+#if ASCII_MODE
+    static void _process_ipc_commands(InputManager *manager);
+#endif
 // ========
 
 void input_manager_update(InputManager *manager, Window *window) {
     if(!manager || !window) {
         return ;
     }
+    #if ASCII_MODE
+        _process_ipc_commands(manager);
+    #endif
     WindowEvent event;
     while(window_poll_event(window, &event)) {
         GameCommand *command = (GameCommand *)malloc(sizeof(GameCommand));
@@ -169,3 +177,48 @@ static bool _construct_mouse_button_command(Window *window, WindowEvent *event, 
     }
     return false;
 }
+#if ASCII_MODE
+static void _process_ipc_commands(InputManager *manager) {
+    IPCCommandEntry ipc_cmd;
+    while(ipc_read_command(&ipc_cmd)) {
+        GameCommand *game_cmd = (GameCommand*)malloc(sizeof(GameCommand));
+        if(!game_cmd) {
+            continue; // for now on failure, it will loop forever and freeze main thread
+        }
+        bool valid = true;
+        switch(ipc_cmd.type) {
+            case IPC_CMD_BACKWARD: case IPC_CMD_FORWARD: case IPC_CMD_LEFT: case IPC_CMD_RIGHT: {
+                // im planning to simulate press duration since currently the input sys is continuous events-based
+                break;
+            }
+            case IPC_CMD_FLY: {
+                game_cmd->type = COMMAND_TOGGLE_FLY;
+                break;
+            }
+            case IPC_CMD_BUILD: {
+                game_cmd->type = COMMAND_BUILD;
+                break;
+            }
+            case IPC_CMD_DESTROY: {
+                game_cmd->type = COMMAND_DESTROY;
+                break;
+            }
+            case IPC_CMD_SELECT_SLOT: {
+                game_cmd->type = COMMAND_SET_ITEM_INDEX;
+                game_cmd->data.set_item.index = ipc_cmd.value;
+                break;
+            }
+            default: {
+                valid = false;
+            }
+        }
+        if(valid) {
+            queue_enqueue(manager->command_queue, game_cmd);
+
+        }
+        else {
+            free(game_cmd);
+        }
+    }
+}
+#endif

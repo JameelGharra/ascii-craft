@@ -5,12 +5,9 @@
 #include <time.h>
 #include "config.h"
 #include "window.h"
-#include "cube.h"
 #include "db.h"
 #include "item.h"
 #include "map.h"
-#include "matrix.h"
-#include "noise.h"
 #include "util.h"
 #include "player.h"
 #include "renderer.h"
@@ -20,11 +17,9 @@
 #include "world_query.h"
 #include "time.h"
 #include "game_clock.h"
-#include <GLFW/glfw3.h>
+#include "ipc.h"
 
-#define ASCII_MODE
-
-#ifdef ASCII_MODE
+#if ASCII_MODE
 #include "ascii_renderer.h"
 #endif
 
@@ -43,7 +38,7 @@ typedef struct
     char db_path[MAX_PATH_LENGTH];
     int day_length;
     int time_changed;
-    #ifdef ASCII_MODE
+    #if ASCII_MODE
         AsciiRenderer *ascii_renderer;
     #endif
 } Model;
@@ -270,21 +265,21 @@ int initialize_main_game_core() {
         .delete_radius = DELETE_CHUNK_RADIUS,
         .sign_radius = RENDER_SIGN_RADIUS,
     });
-    g->input_manager = input_manager_create(g->window);
-    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager) {
-        return 0;
-    }
-
-    #ifdef ASCII_MODE
+    #if ASCII_MODE
         AsciiConfig config = {
-            .ascii_width = 150,
-            .ascii_height = 40,
+            .ascii_width = ASCII_WINDOW_WIDTH,
+            .ascii_height = ASCII_WINDOW_HEIGHT,
             .source_width = WINDOW_WIDTH,
             .source_height = WINDOW_HEIGHT
         };
         g->ascii_renderer = ascii_renderer_create(&config);
-
+        ipc_create();
     #endif
+    g->input_manager = input_manager_create(g->window);
+    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager || !g->ascii_renderer) {
+        return 0;
+    }
+
 
     return 1;
 }
@@ -305,6 +300,10 @@ void destroy_main_game_core() {
         window_free(g->window);
         g->window = NULL;
     }
+    #if ASCII_MODE
+        ascii_renderer_destroy(&g->ascii_renderer);
+        ipc_destroy();
+    #endif
     window_terminate();
 }
 void handle_commands(const WorldQuery *world_query) {
@@ -324,6 +323,9 @@ void handle_commands(const WorldQuery *world_query) {
                 break;
             }
             case COMMAND_SET_ITEM_INDEX: {
+                if(command.data.set_item.index < 0 || command.data.set_item.index >= item_count) {
+                    break;
+                }
                 g->item_index = command.data.set_item.index;
                 break;
             }
@@ -400,7 +402,7 @@ int main(int argc, char **argv)
     while (true) {
         // printf("Frame number: %u\n", frames++);
         // WINDOW SIZE, SCALE AND CLEAR CANVAS //
-        #ifdef ASCII_MODE
+        #if ASCII_MODE
             ascii_renderer_bind_offscreen_buffer(g->ascii_renderer);
         #endif
         renderer_begin_frame(g->renderer);
@@ -463,7 +465,7 @@ int main(int argc, char **argv)
             proceed_render_item(&view);
         }
         // SWAP AND POLL //
-        #ifdef ASCII_MODE
+        #if ASCII_MODE
             ascii_renderer_read_pixels(g->ascii_renderer);
             ascii_renderer_render_to_terminal(g->ascii_renderer);
         #endif
@@ -480,8 +482,9 @@ int main(int argc, char **argv)
     chunk_manager_destroy(g->chunk_manager, g->renderer);
     input_manager_free(g->input_manager);
     renderer_destroy(&g->renderer);
-    #ifdef ASCII_MODE
+    #if ASCII_MODE
         ascii_renderer_destroy(&g->ascii_renderer);
+        ipc_destroy();
     #endif
     window_free(g->window);
     window_terminate();

@@ -97,6 +97,7 @@ func main() {
 	frameCount := 0
 	startBench := time.Now()
 	latencies := make([]float64, 0, 10000)
+	lengths := make([]int, 0, 10000)
 
 	done := make(chan bool)
 	go func() {
@@ -132,13 +133,14 @@ func main() {
 			readStart := time.Now()
 
 			dataLen := *(*uint32)(unsafe.Pointer(&shm.DataLen))
-
+			var _ []byte
 			sliceHeader := struct {
 				Addr uintptr
 				Len  int
 				Cap  int
 			}{dataPtr, int(dataLen), int(dataLen)}
-			shmSlice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
+			_ = *(*[]byte)(unsafe.Pointer(&sliceHeader))
+			lengths = append(lengths, int(dataLen))
 
 			seqAfter := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
 			if seqAfter != currSeq {
@@ -148,7 +150,7 @@ func main() {
 
 			// if frameCount%60 == 0 {
 			// fmt.Print("\033[H\033[2J")
-			fmt.Print(string(shmSlice))
+			// fmt.Print(string(shmSlice))
 			// }
 			lat := time.Since(readStart)
 			latencies = append(latencies, float64(lat.Nanoseconds()))
@@ -177,14 +179,22 @@ func main() {
 	} else {
 		fmt.Println("No collisions detected (Synchronization perfect).")
 	}
-	printIPCStats(frameCount, latencies)
+	printIPCStats(frameCount, latencies, lengths)
 }
 
-func printIPCStats(count int, times []float64) {
+func printIPCStats(count int, times []float64, lengths []int) {
 	if count == 0 {
 		fmt.Println("No frames detected.")
 		return
 	}
+
+	fmt.Printf("Average bytes sent: %d bytes per time\n", func() int {
+		var sum int
+		for _, l := range lengths {
+			sum += l
+		}
+		return sum / len(lengths)
+	}())
 
 	sort.Float64s(times)
 

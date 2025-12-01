@@ -13,14 +13,12 @@ import (
 )
 
 const (
-	// Adjust path relative to where you run this file
 	BinaryPath    = "../../../game/craft.exe"
 	ShmName       = "Local\\CraftSharedMemory"
 	ShmSize       = 1024 * 1024 * 4
 	CmdBufferSize = 256
 )
 
-// Matches C struct layout
 type SharedMemoryLayout struct {
 	FrameSeq uint32
 	Width    uint32
@@ -32,7 +30,7 @@ type SharedMemoryLayout struct {
 
 type IPCCommandEntry struct {
 	Type  uint32
-	Value int32 // Changed to int32 to match C
+	Value int32
 }
 
 const (
@@ -40,36 +38,32 @@ const (
 )
 
 func main() {
-	// 1. Start C Binary
 	abs, err := filepath.Abs(BinaryPath)
 	if err != nil {
 		log.Fatalf("Path error: %v", err)
 	}
 
 	cmd := exec.Command(abs)
-	cmd.Dir = filepath.Dir(abs) // Run in the game directory
-	// Redirect Stderr so we see C errors if they happen
+	cmd.Dir = filepath.Dir(abs) // did that for assets like textures
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
 
-	// Ensure we kill the C process when Go exits
 	defer func() {
 		fmt.Println("Stopping C process...")
 		cmd.Process.Kill()
 	}()
 
 	fmt.Println("Starting C process...")
-	time.Sleep(1 * time.Second) // Wait for C to init SHM
+	time.Sleep(1 * time.Second) // to wait for C to create the shared memory
 
-	// 2. Open Shared Memory
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	procOpenFileMapping := kernel32.NewProc("OpenFileMappingA")
 	procMapViewOfFile := kernel32.NewProc("MapViewOfFile")
 
-	const FILE_MAP_ALL_ACCESS = 0xF001F // Need Write access to send commands!
+	const FILE_MAP_ALL_ACCESS = 0xF001F
 	namePtr, _ := syscall.BytePtrFromString(ShmName)
 
 	hMapFile, _, _ := procOpenFileMapping.Call(
@@ -90,7 +84,6 @@ func main() {
 		log.Fatal("MapViewOfFile failed")
 	}
 
-	// 3. Setup Pointers
 	shm := (*SharedMemoryLayout)(unsafe.Pointer(addr))
 	const HeaderSize = 24
 	const CmdEntrySize = 8
@@ -105,37 +98,33 @@ func main() {
 	startBench := time.Now()
 	latencies := make([]float64, 0, 10000)
 
-	// 4. Background Command Sender (The "Stress" part)
 	done := make(chan bool)
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond) // Fast switching
+		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
-		itemSelection := 0
+		var itemSelection int32 = 0
 
 		for {
 			select {
 			case <-done:
-				return // Stop cleanly
+				return
 			case <-ticker.C:
-				// Logic to change items
-				itemSelection = (itemSelection + 1) % 9
+				itemSelection = (itemSelection + 1) % 10
 
-				// Write to Ring Buffer
 				tail := *(*uint32)(unsafe.Pointer(&shm.CmdTail))
 				idx := tail % CmdBufferSize
 				entryAddr := cmdArrayPtr + uintptr(idx*CmdEntrySize)
 
 				entry := (*IPCCommandEntry)(unsafe.Pointer(entryAddr))
 				entry.Type = CmdSelectSlot
-				entry.Value = int32(itemSelection + 1) // Slots 1-9
+				entry.Value = int32(itemSelection) // did slots 1-9 just like for keys slotindex choosing
 
-				// Increment Tail (Signal C)
 				*(*uint32)(unsafe.Pointer(&shm.CmdTail)) = tail + 1
 			}
 		}
 	}()
 
-	// 5. Main Reader Loop
+	collisions := 0 // count of frame tears detected
 	for {
 		currSeq := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
 
@@ -144,20 +133,23 @@ func main() {
 
 			dataLen := *(*uint32)(unsafe.Pointer(&shm.DataLen))
 
-			// Zero-copy read
-			var _ []byte
 			sliceHeader := struct {
 				Addr uintptr
 				Len  int
 				Cap  int
 			}{dataPtr, int(dataLen), int(dataLen)}
 			shmSlice := *(*[]byte)(unsafe.Pointer(&sliceHeader))
-			if frameCount%60 == 0 {
-				fmt.Print("\033[H\033[2J")
-				// Convert bytes to string and print.
-				// Since it contains ANSI codes, your terminal should render colors!
-				fmt.Println(string(shmSlice))
+
+			seqAfter := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
+			if seqAfter != currSeq {
+				collisions++
+				continue // I am not counting the torn frames at the moment (we are not accepting things like half frame old & half a new)
 			}
+
+			// if frameCount%60 == 0 {
+			// fmt.Print("\033[H\033[2J")
+			fmt.Print(string(shmSlice))
+			// }
 			lat := time.Since(readStart)
 			latencies = append(latencies, float64(lat.Nanoseconds()))
 
@@ -169,19 +161,22 @@ func main() {
 			}
 		}
 
-		// Run for exactly 10 seconds
-		if time.Since(startBench) > 10*time.Second {
+		if time.Since(startBench) > 10*time.Second { // made it run for 10 seconds
 			break
 		}
 
-		// Busy wait for precision
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 100; i++ { // busy wait for precision
+
 		}
 	}
 
-	// 6. Cleanup
-	close(done) // Tell the background thread to stop
+	close(done)
 	fmt.Println("\n\n--- RESULTS ---")
+	if collisions > 0 {
+		fmt.Printf("WARNING: Detected %d frame tears (Collisions avoided)\n", collisions)
+	} else {
+		fmt.Println("No collisions detected (Synchronization perfect).")
+	}
 	printIPCStats(frameCount, latencies)
 }
 
@@ -197,9 +192,6 @@ func printIPCStats(count int, times []float64) {
 	for _, t := range times {
 		sum += t
 	}
-
-	// times holds Nanoseconds.
-	// To get Microseconds, we divide by 1000.0
 
 	avgNs := sum / float64(len(times))
 	p99Ns := times[int(float64(len(times))*0.99)]

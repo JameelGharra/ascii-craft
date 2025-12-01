@@ -110,6 +110,9 @@ static SharedMemoryLayout *shm_ptr = NULL;
         shm_ptr->width = 0;
         shm_ptr->height = 0;
         shm_ptr->data_len = 0;
+        shm_ptr->cmd_head = 0;
+        shm_ptr->cmd_tail = 0;
+        memset(shm_ptr->commands, 0, sizeof(shm_ptr->commands));
     }
 
     void ipc_destroy() {
@@ -139,7 +142,7 @@ void ipc_write_frame(uint8_t *buffer, uint32_t len, uint32_t w, uint32_t h) {
     shm_ptr->height = h;
     shm_ptr->data_len = len;
     memcpy(shm_ptr->data, buffer, len);
-    __sync_fetch_and_add(&shm_ptr->frame_seq, 1); // finished writing
+    __sync_fetch_and_add(&shm_ptr->frame_seq, 1); // finished writing and data is ready
 }
 
 bool ipc_read_command(IPCCommandEntry *out_cmd) {

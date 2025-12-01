@@ -323,6 +323,9 @@ void handle_commands(const WorldQuery *world_query) {
                 break;
             }
             case COMMAND_SET_ITEM_INDEX: {
+                if(command.data.set_item.index < 0 || command.data.set_item.index >= item_count) {
+                    break;
+                }
                 g->item_index = command.data.set_item.index;
                 break;
             }

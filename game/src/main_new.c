@@ -467,7 +467,14 @@ int main(int argc, char **argv)
         // SWAP AND POLL //
         #if ASCII_MODE
             ascii_renderer_read_pixels(g->ascii_renderer);
-            ascii_renderer_render_to_terminal(g->ascii_renderer);
+            ipc_notify_data_not_ready();
+            uint32_t data_len = ascii_renderer_render(g->ascii_renderer, (AsciiPixel*)ipc_get_data_pointer());
+            uint32_t ascii_width, ascii_height;
+            ascii_renderer_get_target_size(g->ascii_renderer, &ascii_width, &ascii_height);
+            ipc_notify_data_ready(ascii_width, ascii_height, data_len);
+            #if ASCII_LOCAL_PRINT
+                ascii_renderer_print_debug(g->ascii_renderer, (AsciiPixel*)ipc_get_data_pointer());
+            #endif
         #endif
         if(!window_next_frame(g->window)) {
             break;

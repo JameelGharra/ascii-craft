@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "ascii_renderer.h"
 
 #define SHM_SIZE (1024  * 1024 * 4) // ~ 4 MB (I did this to be suited for 4K resolution ASCII - which will never gonna happen)
 
@@ -53,6 +54,9 @@ void ipc_create();
 void ipc_destroy();
 
 void ipc_write_frame(uint8_t *buffer, uint32_t len, uint32_t w, uint32_t h);
+void ipc_notify_data_not_ready();
+void ipc_notify_data_ready(uint32_t w, uint32_t h, uint32_t len);
+void *ipc_get_data_pointer();
 bool ipc_read_command(IPCCommandEntry *out_cmd);
 
 #endif

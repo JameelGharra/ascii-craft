@@ -33,6 +33,13 @@ type IPCCommandEntry struct {
 	Value int32
 }
 
+type AsciiPixel struct {
+	CharCode uint8
+	r        uint8
+	g        uint8
+	b        uint8
+}
+
 const (
 	CmdSelectSlot = 9
 )
@@ -126,6 +133,7 @@ func main() {
 	}()
 
 	collisions := 0 // count of frame tears detected
+	// var bufferPtr *[]byte
 	for {
 		currSeq := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
 
@@ -133,13 +141,13 @@ func main() {
 			readStart := time.Now()
 
 			dataLen := *(*uint32)(unsafe.Pointer(&shm.DataLen))
-			var _ []byte
+			var _ []AsciiPixel
 			sliceHeader := struct {
 				Addr uintptr
 				Len  int
 				Cap  int
 			}{dataPtr, int(dataLen), int(dataLen)}
-			_ = *(*[]byte)(unsafe.Pointer(&sliceHeader))
+			_ = *(*[]AsciiPixel)(unsafe.Pointer(&sliceHeader))
 			lengths = append(lengths, int(dataLen))
 
 			seqAfter := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
@@ -149,8 +157,8 @@ func main() {
 			}
 
 			// if frameCount%60 == 0 {
-			// fmt.Print("\033[H\033[2J")
-			// fmt.Print(string(shmSlice))
+			// PrintFrameInANSII(bufferPtr, &shmSlice, int(shm.Width), int(shm.Height))
+
 			// }
 			lat := time.Since(readStart)
 			latencies = append(latencies, float64(lat.Nanoseconds()))
@@ -182,6 +190,37 @@ func main() {
 	printIPCStats(frameCount, latencies, lengths)
 }
 
+// func PrintFrameInANSII(bufferPtr *[]byte, dataPtr *[]AsciiPixel, width, height int) {
+// 	data := *dataPtr
+// 	if bufferPtr == nil {
+// 		buff := make([]byte, 0, (19+1)*width*height+height+9)
+// 		bufferPtr = &buff
+// 	}
+// 	*bufferPtr = (*bufferPtr)[:0]
+
+//		*bufferPtr = append(*bufferPtr, '\033', '[', 'H') // ANSI escape code to move cursor to top-left
+//		var lastColor uint32 = 0xFFFFFFFF
+//		for y := range height {
+//			for x := range width {
+//				idx := y*width + x
+//				currentColor := (uint32(data[idx].r) << 16) | (uint32(data[idx].g) << 8) | uint32(data[idx].b)
+//				if currentColor != lastColor {
+//					*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
+//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].r), 10)
+//					*bufferPtr = append(*bufferPtr, ';')
+//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].g), 10)
+//					*bufferPtr = append(*bufferPtr, ';')
+//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].b), 10)
+//					*bufferPtr = append(*bufferPtr, 'm')
+//					lastColor = currentColor
+//				}
+//				*bufferPtr = append(*bufferPtr, data[idx].CharCode)
+//			}
+//			*bufferPtr = append(*bufferPtr, '\n')
+//		}
+//		*bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
+//		os.Stdout.Write(*bufferPtr)
+//	}
 func printIPCStats(count int, times []float64, lengths []int) {
 	if count == 0 {
 		fmt.Println("No frames detected.")

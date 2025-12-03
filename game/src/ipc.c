@@ -144,7 +144,27 @@ void ipc_write_frame(uint8_t *buffer, uint32_t len, uint32_t w, uint32_t h) {
     memcpy(shm_ptr->data, buffer, len);
     __sync_fetch_and_add(&shm_ptr->frame_seq, 1); // finished writing and data is ready
 }
-
+void *ipc_get_data_pointer() {
+    if(!shm_ptr) {
+        return NULL;
+    }
+    return (void*)shm_ptr->data;
+}
+void ipc_notify_data_not_ready() {
+    if(!shm_ptr) {
+        return ;
+    }
+    __sync_fetch_and_add(&shm_ptr->frame_seq, 1);
+}
+void ipc_notify_data_ready(uint32_t w, uint32_t h, uint32_t len) {
+    if(!shm_ptr) {
+        return ;
+    }
+    shm_ptr->width = w;
+    shm_ptr->height = h;
+    shm_ptr->data_len = len;
+    __sync_fetch_and_add(&shm_ptr->frame_seq, 1);
+}
 bool ipc_read_command(IPCCommandEntry *out_cmd) {
     if(!shm_ptr || !out_cmd) {
         return false;
@@ -156,6 +176,7 @@ bool ipc_read_command(IPCCommandEntry *out_cmd) {
         return false;
     }
     *out_cmd = shm_ptr->commands[head % IPC_CMD_BUFFER_SIZE];
+    __sync_synchronize(); // to ensure we read the command before updating the head
     shm_ptr->cmd_head = head + 1;
     return true;
 }

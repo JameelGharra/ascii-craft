@@ -7,42 +7,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"syscall"
+	"strconv"
 	"time"
-	"unsafe"
+
+	"github.com/JameelGharra/ascii-craft/server/ipc"
+	"github.com/JameelGharra/ascii-craft/server/rgb"
 )
 
-const (
-	BinaryPath    = "../../../game/craft.exe"
-	ShmName       = "Local\\CraftSharedMemory"
-	ShmSize       = 1024 * 1024 * 4
-	CmdBufferSize = 256
-)
-
-type SharedMemoryLayout struct {
-	FrameSeq uint32
-	Width    uint32
-	Height   uint32
-	DataLen  uint32
-	CmdHead  uint32
-	CmdTail  uint32
-}
-
-type IPCCommandEntry struct {
-	Type  uint32
-	Value int32
-}
-
-type AsciiPixel struct {
-	CharCode uint8
-	r        uint8
-	g        uint8
-	b        uint8
-}
-
-const (
-	CmdSelectSlot = 9
-)
+const BinaryPath = "../../../game/craft.exe"
 
 func main() {
 	abs, err := filepath.Abs(BinaryPath)
@@ -66,41 +38,14 @@ func main() {
 	fmt.Println("Starting C process...")
 	time.Sleep(1 * time.Second) // to wait for C to create the shared memory
 
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	procOpenFileMapping := kernel32.NewProc("OpenFileMappingA")
-	procMapViewOfFile := kernel32.NewProc("MapViewOfFile")
-
-	const FILE_MAP_ALL_ACCESS = 0xF001F
-	namePtr, _ := syscall.BytePtrFromString(ShmName)
-
-	hMapFile, _, _ := procOpenFileMapping.Call(
-		uintptr(FILE_MAP_ALL_ACCESS),
-		0,
-		uintptr(unsafe.Pointer(namePtr)),
-	)
-	if hMapFile == 0 {
-		log.Fatal("Could not open shared memory. Is craft.exe running?")
+	client, err := ipc.NewClient()
+	if err != nil {
+		log.Fatalf("Failed to create IPC client: %v", err)
 	}
-
-	addr, _, _ := procMapViewOfFile.Call(
-		hMapFile,
-		uintptr(FILE_MAP_ALL_ACCESS),
-		0, 0, 0,
-	)
-	if addr == 0 {
-		log.Fatal("MapViewOfFile failed")
-	}
-
-	shm := (*SharedMemoryLayout)(unsafe.Pointer(addr))
-	const HeaderSize = 24
-	const CmdEntrySize = 8
-
-	cmdArrayPtr := addr + HeaderSize
-	dataPtr := addr + HeaderSize + (CmdBufferSize * CmdEntrySize)
+	defer client.Close()
 
 	fmt.Println("--- STARTING IPC STRESS TEST ---")
 
-	lastSeq := uint32(0)
 	frameCount := 0
 	startBench := time.Now()
 	latencies := make([]float64, 0, 10000)
@@ -118,62 +63,34 @@ func main() {
 				return
 			case <-ticker.C:
 				itemSelection = (itemSelection + 1) % 10
-
-				tail := *(*uint32)(unsafe.Pointer(&shm.CmdTail))
-				idx := tail % CmdBufferSize
-				entryAddr := cmdArrayPtr + uintptr(idx*CmdEntrySize)
-
-				entry := (*IPCCommandEntry)(unsafe.Pointer(entryAddr))
-				entry.Type = CmdSelectSlot
-				entry.Value = int32(itemSelection) // did slots 1-9 just like for keys slotindex choosing
-
-				*(*uint32)(unsafe.Pointer(&shm.CmdTail)) = tail + 1
+				if err := client.WriteCommand(ipc.CmdSelectSlot, itemSelection); err != nil {
+					log.Printf("Failed to write command: %v", err)
+				}
 			}
 		}
 	}()
 
 	collisions := 0 // count of frame tears detected
-	// var bufferPtr *[]byte
+	var bufferPtr *[]byte
 	for {
-		currSeq := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
-
-		if currSeq > lastSeq && currSeq%2 == 0 {
-			readStart := time.Now()
-
-			dataLen := *(*uint32)(unsafe.Pointer(&shm.DataLen))
-			var _ []AsciiPixel
-			sliceHeader := struct {
-				Addr uintptr
-				Len  int
-				Cap  int
-			}{dataPtr, int(dataLen), int(dataLen)}
-			_ = *(*[]AsciiPixel)(unsafe.Pointer(&sliceHeader))
-			lengths = append(lengths, int(dataLen))
-
-			seqAfter := *(*uint32)(unsafe.Pointer(&shm.FrameSeq))
-			if seqAfter != currSeq {
-				collisions++
-				continue // I am not counting the torn frames at the moment (we are not accepting things like half frame old & half a new)
-			}
-
-			// if frameCount%60 == 0 {
-			// PrintFrameInANSII(bufferPtr, &shmSlice, int(shm.Width), int(shm.Height))
-
-			// }
-			lat := time.Since(readStart)
-			latencies = append(latencies, float64(lat.Nanoseconds()))
-
-			lastSeq = currSeq
-			frameCount++
-
-			if frameCount%60 == 0 {
-				fmt.Print(".")
-			}
-		}
-
 		if time.Since(startBench) > 10*time.Second { // made it run for 10 seconds
 			break
 		}
+		frame, isNew := client.TryReadFrame()
+		if !isNew {
+			collisions++
+			continue
+		}
+		readStart := time.Now()
+		lengths = append(lengths, int(len(frame.Pixels)*ipc.PixelSize)) // pixels * sizeof(AsciiPixel)
+
+		// if frameCount%60 == 0 {
+		PrintFrameInANSII(bufferPtr, frame, int(frame.Width), int(frame.Height))
+
+		// }
+		lat := time.Since(readStart)
+		latencies = append(latencies, float64(lat.Nanoseconds()))
+		frameCount++
 
 		for i := 0; i < 100; i++ { // busy wait for precision
 
@@ -190,37 +107,67 @@ func main() {
 	printIPCStats(frameCount, latencies, lengths)
 }
 
-// func PrintFrameInANSII(bufferPtr *[]byte, dataPtr *[]AsciiPixel, width, height int) {
-// 	data := *dataPtr
-// 	if bufferPtr == nil {
-// 		buff := make([]byte, 0, (19+1)*width*height+height+9)
-// 		bufferPtr = &buff
-// 	}
-// 	*bufferPtr = (*bufferPtr)[:0]
+func PrintFrameInANSII(bufferPtr *[]byte, frame *ipc.Frame, width, height int) {
+	data := frame.Pixels
+	if bufferPtr == nil {
+		buff := make([]byte, 0, (19+1)*width*height+height+9)
+		bufferPtr = &buff
+	}
+	*bufferPtr = (*bufferPtr)[:0]
 
-//		*bufferPtr = append(*bufferPtr, '\033', '[', 'H') // ANSI escape code to move cursor to top-left
-//		var lastColor uint32 = 0xFFFFFFFF
-//		for y := range height {
-//			for x := range width {
-//				idx := y*width + x
-//				currentColor := (uint32(data[idx].r) << 16) | (uint32(data[idx].g) << 8) | uint32(data[idx].b)
-//				if currentColor != lastColor {
-//					*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
-//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].r), 10)
-//					*bufferPtr = append(*bufferPtr, ';')
-//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].g), 10)
-//					*bufferPtr = append(*bufferPtr, ';')
-//					*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].b), 10)
-//					*bufferPtr = append(*bufferPtr, 'm')
-//					lastColor = currentColor
-//				}
-//				*bufferPtr = append(*bufferPtr, data[idx].CharCode)
-//			}
-//			*bufferPtr = append(*bufferPtr, '\n')
-//		}
-//		*bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
-//		os.Stdout.Write(*bufferPtr)
-//	}
+	*bufferPtr = append(*bufferPtr, '\033', '[', 'H') // ANSI escape code to move cursor to top-left
+	var lastColor uint32 = 0xFFFFFFFF
+	// for y := range height {
+	// 	for x := range width {
+	// 		idx := y*width + x
+	// 		currentColor := (uint32(data[idx].R) << 16) | (uint32(data[idx].G) << 8) | uint32(data[idx].B)
+	// 		if currentColor != lastColor {
+	// 			*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].R), 10)
+	// 			*bufferPtr = append(*bufferPtr, ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].G), 10)
+	// 			*bufferPtr = append(*bufferPtr, ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].B), 10)
+	// 			*bufferPtr = append(*bufferPtr, 'm')
+	// 			lastColor = currentColor
+	// 		}
+	// 		*bufferPtr = append(*bufferPtr, data[idx].CharCode)
+	// 	}
+	// 	*bufferPtr = append(*bufferPtr, '\n')
+	// }
+	// *bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
+	// os.Stdout.Write(*bufferPtr)
+
+	// for comparison with 8 bit color
+	lastColor = 0xFFFFFFFF
+
+	for y := range height {
+		for x := range width {
+			idx := y*width + x
+			// 1. Quantize down (0-7, 0-7, 0-3)
+			rSmall, gSmall, bSmall := rgb.RGBToColor8BitANSII(data[idx].R, data[idx].G, data[idx].B)
+
+			// 2. Scale UP for display (0-255)
+			rDisp, gDisp, bDisp := rgb.Scale8BitToTrueColor(rSmall, gSmall, bSmall)
+
+			currentColor := (uint32(rDisp) << 16) | (uint32(gDisp) << 8) | uint32(bDisp)
+			if currentColor != lastColor {
+				*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(rDisp), 10)
+				*bufferPtr = append(*bufferPtr, ';')
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(gDisp), 10)
+				*bufferPtr = append(*bufferPtr, ';')
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(bDisp), 10)
+				*bufferPtr = append(*bufferPtr, 'm')
+				lastColor = currentColor
+			}
+			*bufferPtr = append(*bufferPtr, data[idx].CharCode)
+		}
+		*bufferPtr = append(*bufferPtr, '\n')
+	}
+	*bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
+	os.Stdout.Write(*bufferPtr)
+}
 func printIPCStats(count int, times []float64, lengths []int) {
 	if count == 0 {
 		fmt.Println("No frames detected.")

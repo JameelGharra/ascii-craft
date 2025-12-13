@@ -156,7 +156,7 @@ uint32_t ascii_renderer_render(AsciiRenderer *renderer, AsciiPixel *out) {
             } 
         }
     }
-    uint32_t length = renderer->config.ascii_width * renderer->config.ascii_height;
+    uint32_t length = renderer->config.ascii_width * renderer->config.ascii_height*sizeof(AsciiPixel);
 
     double end_time = time_get_seconds();
     renderer->conversion_time_ms = (end_time - start_time) * 1000.0;

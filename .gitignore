@@ -15,3 +15,5 @@ log.txt
 /game/*.pyc
 /build
 .vscode
+remover.py
+converter.py

@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include "time.h"
 #include "config.h"
-#include "ipc.h"
 
 static const char *ASCII_PALETTE = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 static const int PALETTE_COUNT = 70; // did not include \0 in this count
@@ -21,9 +20,10 @@ struct AsciiRenderer {
 
     // CPU-side buffers (allocated once, reused every frame)
     unsigned char *pixel_buffer; // the high-res pixels read from the GPU
+    #if ASCII_LOCAL_PRINT
     char *frame_buffer;          // the final low-res ASCII string
     size_t frame_buffer_size;
-
+    #endif
     // For performance stats
     double conversion_time_ms;
     double frame_start_time;
@@ -39,10 +39,12 @@ AsciiRenderer* ascii_renderer_create(const AsciiConfig *config) {
     size_t pixel_buffer_size = config->source_width * config->source_height * 3; // RGB
     renderer->pixel_buffer = (unsigned char*)malloc(pixel_buffer_size);
     
+    #if ASCII_LOCAL_PRINT
     // generous estimate for the frame buffer size
-    // (max ANSI color code len + 1 char) * num_chars + num_newlines + reset code + null terminator
-    renderer->frame_buffer_size = (19 + 1) * config->ascii_width * config->ascii_height + config->ascii_height + 5;
+    // (max ANSI color code len + 1 char) * num_chars + num_newlines + reset code + reset at top left + null terminator
+    renderer->frame_buffer_size = (19 + 1) * config->ascii_width * config->ascii_height + config->ascii_height + 9;
     renderer->frame_buffer = (char*)malloc(renderer->frame_buffer_size);
+    #endif
 
     glGenFramebuffers(1, &renderer->fbo_handle);
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->fbo_handle);
@@ -63,7 +65,9 @@ AsciiRenderer* ascii_renderer_create(const AsciiConfig *config) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         fprintf(stderr, "Error: Off-screen framebuffer is not complete!\n");
         free(renderer->pixel_buffer);
-        free(renderer->frame_buffer);
+        #if ASCII_LOCAL_PRINT
+            free(renderer->frame_buffer);
+        #endif
         free(renderer);
         return NULL;
     }
@@ -81,7 +85,9 @@ void ascii_renderer_destroy(AsciiRenderer **renderer_ptr) {
     AsciiRenderer* renderer = *renderer_ptr;
 
     free(renderer->pixel_buffer);
-    free(renderer->frame_buffer);
+    #if ASCII_LOCAL_PRINT
+        free(renderer->frame_buffer);
+    #endif
 
     glDeleteFramebuffers(1, &renderer->fbo_handle);
     glDeleteTextures(1, &renderer->texture_handle);
@@ -103,21 +109,14 @@ void ascii_renderer_read_pixels(AsciiRenderer *renderer) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
+uint32_t ascii_renderer_render(AsciiRenderer *renderer, AsciiPixel *out) {
 
-    #if ASCII_LOCAL_PRINT
-        fprintf(stdout, ":::FRAME_START:::\n");
-    #endif
     double start_time = time_get_seconds();
-    char *buf_ptr = renderer->frame_buffer;
-    uint32_t last_color = 0xFFFFFFFF; // impossible color to force first write
 
     // scaling factors
     const float block_width = (float)renderer->config.source_width / renderer->config.ascii_width;
     const float block_height = (float)renderer->config.source_height / renderer->config.ascii_height;
     
-    buf_ptr += sprintf(buf_ptr, "\033[;H"); // cursor to top-left
-
     for (int y = 0; y < renderer->config.ascii_height; ++y) {
         for (int x = 0; x < renderer->config.ascii_width; ++x) {
             
@@ -145,41 +144,19 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
                 unsigned char r = total_r / pixel_count;
                 unsigned char g = total_g / pixel_count;
                 unsigned char b = total_b / pixel_count;
-
-                // stateful color optimization
-                uint32_t current_color = (r << 16) | (g << 8) | b;
-                if (current_color != last_color) {
-                    buf_ptr += sprintf(buf_ptr, "\033[38;2;%d;%d;%dm", r, g, b);
-                    last_color = current_color;
-                }
+                
+                out[y * renderer->config.ascii_width + x].r = r;
+                out[y * renderer->config.ascii_width + x].g = g;
+                out[y * renderer->config.ascii_width + x].b = b;
 
                 // weighted brightness for more perceptually accurate luminance
                 float brightness = (0.2126f * r + 0.7152f * g + 0.0722f * b);
                 int palette_index = (int)((brightness / 255.0f) * (PALETTE_COUNT - 1));
-                *buf_ptr++ = ASCII_PALETTE[palette_index];
-
+                out[y * renderer->config.ascii_width + x].char_code = ASCII_PALETTE[palette_index];
             } 
-            else {
-                 *buf_ptr++ = ' ';
-            }
         }
-        *buf_ptr++ = '\n';
     }
-    // reset code at the end (to get normal terminal colors back)
-    buf_ptr += sprintf(buf_ptr, "\033[0m");
-
-    uint32_t length = (uint32_t) (buf_ptr - renderer->frame_buffer);
-    ipc_write_frame(
-        (uint8_t*)renderer->frame_buffer,
-        length,
-        renderer->config.ascii_width,
-        renderer->config.ascii_height
-    );
-    #if ASCII_LOCAL_PRINT
-        fputs(renderer->frame_buffer, stdout);
-        fprintf(stdout, "\n:::FRAME_END:::\n");
-        fflush(stdout);
-    #endif
+    uint32_t length = renderer->config.ascii_width * renderer->config.ascii_height*sizeof(AsciiPixel);
 
     double end_time = time_get_seconds();
     renderer->conversion_time_ms = (end_time - start_time) * 1000.0;
@@ -188,6 +165,37 @@ void ascii_renderer_render_to_terminal(AsciiRenderer *renderer) {
         renderer->fps = 1.0 / (end_time - renderer->frame_start_time);
     }
     renderer->frame_start_time = end_time;
+    return length;
+}
+#if ASCII_LOCAL_PRINT
+void ascii_renderer_print_debug(AsciiRenderer *renderer, const AsciiPixel *buffer) {
+    char *buf_ptr = renderer->frame_buffer;
+    buf_ptr += sprintf(buf_ptr, "\033[;H"); // cursor to top-left
+    uint32_t last_color = 0xFFFFFFFF; // impossible that r, g, b going to have that combined
+    for(int y = 0; y < renderer->config.ascii_height; ++y) {
+        for(int x = 0; x < renderer->config.ascii_width; ++x) {
+            const AsciiPixel *pixel = &buffer[y * renderer->config.ascii_width + x];
+            uint32_t current_color = ((uint32_t)pixel->r << 16) | ((uint32_t)pixel->g << 8) | (uint32_t)pixel->b;
+            if (current_color != last_color) {
+                buf_ptr += sprintf(buf_ptr, "\033[38;2;%d;%d;%dm", pixel->r, pixel->g, pixel->b);
+                last_color = current_color;
+            }
+            *buf_ptr++ = pixel->char_code;
+        }
+        *buf_ptr++ = '\n';
+    }
+    buf_ptr += sprintf(buf_ptr, "\033[0m"); // reset code at the end (to get normal terminal colors back)
+    fputs(renderer->frame_buffer, stdout);
+    fflush(stdout);
+}
+#endif
+void ascii_renderer_get_target_size(AsciiRenderer *renderer, int *width, int *height) {
+    if (width) {
+        *width = renderer->config.ascii_width;
+    }
+    if (height) {
+        *height = renderer->config.ascii_height;
+    }
 }
 
 void ascii_renderer_get_stats(

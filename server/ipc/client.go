@@ -4,13 +4,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"unsafe"
-)
 
-type Frame struct {
-	Width  uint32
-	Height uint32
-	Pixels []AsciiPixel
-}
+	"github.com/JameelGharra/ascii-craft/server/ascii"
+)
 
 type Client struct {
 	shm     *SharedMemoryLayout
@@ -20,7 +16,7 @@ type Client struct {
 	handle syscall.Handle
 
 	lastSeq  uint32
-	pixelBuf []AsciiPixel
+	pixelBuf []ascii.AsciiPixel
 }
 
 func NewClient() (*Client, error) {
@@ -39,7 +35,7 @@ func NewClient() (*Client, error) {
 		cmdPtr:   cmdPtr,
 		dataPtr:  dataPtr,
 		handle:   handle,
-		pixelBuf: make([]AsciiPixel, 0, 4096),
+		pixelBuf: make([]ascii.AsciiPixel, 0, 4096),
 	}, nil
 }
 
@@ -59,7 +55,9 @@ func (c *Client) WriteCommand(cmdType uint32, value int32) error {
 	return nil
 }
 
-func (c *Client) TryReadFrame() (*Frame, bool) {
+var Collisions int = 0
+
+func (c *Client) TryReadFrame() (*ascii.Frame, bool) {
 	currSeq := atomic.LoadUint32(&c.shm.FrameSeq)
 	if currSeq%2 != 0 || currSeq == c.lastSeq {
 		return nil, false
@@ -75,7 +73,7 @@ func (c *Client) TryReadFrame() (*Frame, bool) {
 
 	if cap(c.pixelBuf) < numPixels {
 		newCap := numPixels + (numPixels / 2) // 1.5x capacity for now
-		c.pixelBuf = make([]AsciiPixel, numPixels, newCap)
+		c.pixelBuf = make([]ascii.AsciiPixel, numPixels, newCap)
 	}
 	c.pixelBuf = c.pixelBuf[:numPixels]
 	srcSliceHeader := struct {
@@ -83,14 +81,15 @@ func (c *Client) TryReadFrame() (*Frame, bool) {
 		Len  int
 		Cap  int
 	}{c.dataPtr, numPixels, numPixels}
-	src := *(*[]AsciiPixel)(unsafe.Pointer(&srcSliceHeader))
+	src := *(*[]ascii.AsciiPixel)(unsafe.Pointer(&srcSliceHeader))
 	copy(c.pixelBuf, src)
 	seqAfter := atomic.LoadUint32(&c.shm.FrameSeq)
 	if seqAfter != currSeq { // torn frames
+		Collisions++
 		return nil, false
 	}
 	c.lastSeq = currSeq
-	return &Frame{
+	return &ascii.Frame{
 		Width:  width,
 		Height: height,
 		Pixels: c.pixelBuf[:numPixels],

@@ -35,10 +35,3 @@ type IPCCommandEntry struct {
 	Type  uint32
 	Value int32
 }
-
-type AsciiPixel struct {
-	CharCode uint8
-	R        uint8
-	G        uint8
-	B        uint8
-}

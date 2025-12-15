@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/ipc"
-	"github.com/JameelGharra/ascii-craft/server/rgb"
 )
 
 const BinaryPath = "../../../game/craft.exe"
@@ -70,7 +70,6 @@ func main() {
 		}
 	}()
 
-	collisions := 0 // count of frame tears detected
 	var bufferPtr *[]byte
 	for {
 		if time.Since(startBench) > 10*time.Second { // made it run for 10 seconds
@@ -78,7 +77,6 @@ func main() {
 		}
 		frame, isNew := client.TryReadFrame()
 		if !isNew {
-			collisions++
 			continue
 		}
 		readStart := time.Now()
@@ -99,15 +97,15 @@ func main() {
 
 	close(done)
 	fmt.Println("\n\n--- RESULTS ---")
-	if collisions > 0 {
-		fmt.Printf("WARNING: Detected %d frame tears (Collisions avoided)\n", collisions)
+	if ipc.Collisions > 0 {
+		fmt.Printf("WARNING: Detected %d frame tears (Collisions avoided)\n", ipc.Collisions)
 	} else {
 		fmt.Println("No collisions detected (Synchronization perfect).")
 	}
 	printIPCStats(frameCount, latencies, lengths)
 }
 
-func PrintFrameInANSII(bufferPtr *[]byte, frame *ipc.Frame, width, height int) {
+func PrintFrameInANSII(bufferPtr *[]byte, frame *ascii.Frame, width, height int) {
 	data := frame.Pixels
 	if bufferPtr == nil {
 		buff := make([]byte, 0, (19+1)*width*height+height+9)
@@ -117,47 +115,17 @@ func PrintFrameInANSII(bufferPtr *[]byte, frame *ipc.Frame, width, height int) {
 
 	*bufferPtr = append(*bufferPtr, '\033', '[', 'H') // ANSI escape code to move cursor to top-left
 	var lastColor uint32 = 0xFFFFFFFF
-	// for y := range height {
-	// 	for x := range width {
-	// 		idx := y*width + x
-	// 		currentColor := (uint32(data[idx].R) << 16) | (uint32(data[idx].G) << 8) | uint32(data[idx].B)
-	// 		if currentColor != lastColor {
-	// 			*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
-	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].R), 10)
-	// 			*bufferPtr = append(*bufferPtr, ';')
-	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].G), 10)
-	// 			*bufferPtr = append(*bufferPtr, ';')
-	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].B), 10)
-	// 			*bufferPtr = append(*bufferPtr, 'm')
-	// 			lastColor = currentColor
-	// 		}
-	// 		*bufferPtr = append(*bufferPtr, data[idx].CharCode)
-	// 	}
-	// 	*bufferPtr = append(*bufferPtr, '\n')
-	// }
-	// *bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
-	// os.Stdout.Write(*bufferPtr)
-
-	// for comparison with 8 bit color
-	lastColor = 0xFFFFFFFF
-
 	for y := range height {
 		for x := range width {
 			idx := y*width + x
-			// 1. Quantize down (0-7, 0-7, 0-3)
-			rSmall, gSmall, bSmall := rgb.RGBToColor8BitANSII(data[idx].R, data[idx].G, data[idx].B)
-
-			// 2. Scale UP for display (0-255)
-			rDisp, gDisp, bDisp := rgb.Scale8BitToTrueColor(rSmall, gSmall, bSmall)
-
-			currentColor := (uint32(rDisp) << 16) | (uint32(gDisp) << 8) | uint32(bDisp)
+			currentColor := (uint32(data[idx].R) << 16) | (uint32(data[idx].G) << 8) | uint32(data[idx].B)
 			if currentColor != lastColor {
 				*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
-				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(rDisp), 10)
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].R), 10)
 				*bufferPtr = append(*bufferPtr, ';')
-				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(gDisp), 10)
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].G), 10)
 				*bufferPtr = append(*bufferPtr, ';')
-				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(bDisp), 10)
+				*bufferPtr = strconv.AppendInt(*bufferPtr, int64(data[idx].B), 10)
 				*bufferPtr = append(*bufferPtr, 'm')
 				lastColor = currentColor
 			}
@@ -167,6 +135,36 @@ func PrintFrameInANSII(bufferPtr *[]byte, frame *ipc.Frame, width, height int) {
 	}
 	*bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
 	os.Stdout.Write(*bufferPtr)
+
+	// for comparison with 8 bit color
+	// lastColor = 0xFFFFFFFF
+
+	// for y := range height {
+	// 	for x := range width {
+	// 		idx := y*width + x
+	// 		// 1. Quantize down (0-7, 0-7, 0-3)
+	// 		rSmall, gSmall, bSmall := rgb.RGBToColor8BitANSII(data[idx].R, data[idx].G, data[idx].B)
+
+	// 		// 2. Scale UP for display (0-255)
+	// 		rDisp, gDisp, bDisp := rgb.Scale8BitToTrueColor(rSmall, gSmall, bSmall)
+
+	// 		currentColor := (uint32(rDisp) << 16) | (uint32(gDisp) << 8) | uint32(bDisp)
+	// 		if currentColor != lastColor {
+	// 			*bufferPtr = append(*bufferPtr, '\033', '[', '3', '8', ';', '2', ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(rDisp), 10)
+	// 			*bufferPtr = append(*bufferPtr, ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(gDisp), 10)
+	// 			*bufferPtr = append(*bufferPtr, ';')
+	// 			*bufferPtr = strconv.AppendInt(*bufferPtr, int64(bDisp), 10)
+	// 			*bufferPtr = append(*bufferPtr, 'm')
+	// 			lastColor = currentColor
+	// 		}
+	// 		*bufferPtr = append(*bufferPtr, data[idx].CharCode)
+	// 	}
+	// 	*bufferPtr = append(*bufferPtr, '\n')
+	// }
+	// *bufferPtr = append(*bufferPtr, '\033', '[', '0', 'm')
+	// os.Stdout.Write(*bufferPtr)
 }
 func printIPCStats(count int, times []float64, lengths []int) {
 	if count == 0 {

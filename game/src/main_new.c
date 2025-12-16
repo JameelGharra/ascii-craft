@@ -22,6 +22,7 @@
 #if ASCII_MODE
 #include "ascii_renderer.h"
 #endif
+#include "automation_bot.h"
 
 #define MAX_PATH_LENGTH 256
 
@@ -40,6 +41,9 @@ typedef struct
     int time_changed;
     #if ASCII_MODE
         AsciiRenderer *ascii_renderer;
+    #endif
+    #if AUTOMATION_BOT_MODE
+        AutomationBot *automation_bot;
     #endif
 } Model;
 
@@ -174,7 +178,10 @@ void on_scroll(double y_delta) {
     }
 }
 
-void handle_mouse_input() {
+void handle_mouse_input(double dt) {
+    #if AUTOMATION_BOT_MODE
+        automation_bot_look_update(g->automation_bot, &g->local_player, dt);
+    #endif
     double m_dx, m_dy;
     window_get_cursor_delta(g->window, &m_dx, &m_dy);
     player_update_look(&g->local_player, m_dx, m_dy, MOUSE_SENSITIVITY);
@@ -208,7 +215,9 @@ void handle_key_movement(Player *me, WorldQuery *world_query, double dt) {
     if(window_is_key_down(g->window, KEY_DOWN)) {
         intent.turn_down = true;
     }
-
+    #if AUTOMATION_BOT_MODE
+        automation_bot_pos_update(g->automation_bot, me, &intent, dt);
+    #endif
     player_update_pos(me, &intent, world_query, dt);
 }
 void reset_model()
@@ -276,11 +285,14 @@ int initialize_main_game_core() {
         ipc_create();
     #endif
     g->input_manager = input_manager_create(g->window);
-    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager || !g->ascii_renderer) {
+    if(!g->window || !g->renderer || !g->chunk_manager || !g->input_manager) {
         return 0;
     }
-
-
+    #if ASCII_MODE
+    if(!g->ascii_renderer) {
+        return 0;
+    }
+    #endif
     return 1;
 }
 void destroy_main_game_core() {
@@ -352,6 +364,47 @@ void handle_commands(const WorldQuery *world_query) {
                 on_light(world_query);
                 break;
             }
+            #if AUTOMATION_BOT_MODE
+            case COMMAND_MOVE_FORWARD: case COMMAND_MOVE_BACKWARD:
+            case COMMAND_MOVE_LEFT: case COMMAND_MOVE_RIGHT: {
+                g->automation_bot->active_move_dir = command.type - COMMAND_MOVE_FORWARD + 1;
+                g->automation_bot->move_timer = command.data.movement.duration;
+                break;
+            }
+            case COMMAND_LOOK_YAW: {
+                if (!g->automation_bot->is_rotating) { // even if new cmd comes, finish prev and drop the new one
+                    g->automation_bot->is_rotating = true;
+                    g->automation_bot->rotate_timer = 0;
+                    g->automation_bot->rotate_duration = command.data.look.duration;
+                    
+                    g->automation_bot->start_rx = g->local_player.state.rx;
+                    g->automation_bot->start_ry = g->local_player.state.ry;
+                    
+                    g->automation_bot->target_rx = g->automation_bot->start_rx + RADIANS(command.data.look.angle_delta);
+                    g->automation_bot->target_ry = g->automation_bot->start_ry; 
+                }
+                break;
+            }
+            case COMMAND_LOOK_PITCH: {
+                if (!g->automation_bot->is_rotating) {
+                    g->automation_bot->is_rotating = true;
+                    g->automation_bot->rotate_timer = 0;
+                    g->automation_bot->rotate_duration = command.data.look.duration;
+                    
+                    g->automation_bot->start_rx = g->local_player.state.rx;
+                    g->automation_bot->start_ry = g->local_player.state.ry;
+                    
+                    // calculate target and clamp pitch to -90/90 (pi/2)
+                    float target = g->automation_bot->start_ry + RADIANS(command.data.look.angle_delta);
+                    target = MAX(target, -RADIANS(90));
+                    target = MIN(target, RADIANS(90));
+                    
+                    g->automation_bot->target_rx = g->automation_bot->start_rx;
+                    g->automation_bot->target_ry = target;
+                }
+                break;
+            }
+            #endif
         }
     }
 }
@@ -386,6 +439,10 @@ int main(int argc, char **argv)
     renderer_generate_sky_buffer(g->renderer);
 
     Player *me = &g->local_player;
+    #if AUTOMATION_BOT_MODE
+        g->automation_bot = &(AutomationBot){0};
+        automation_bot_reset(g->automation_bot);
+    #endif
     State *s = &me->state;
     player_init(me);
 
@@ -422,7 +479,7 @@ int main(int argc, char **argv)
         previous = now;
 
         // ACTIONS //
-        handle_mouse_input();
+        handle_mouse_input(dt);
         input_manager_update(g->input_manager, g->window);
         update_ortho_zoom();
         handle_key_movement(me, world_query, dt); // continuous

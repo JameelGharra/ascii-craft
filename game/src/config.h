@@ -9,6 +9,7 @@
 #define WINDOW_WIDTH 320 // I figured for here 320x240 is not bad but we downscale for ASCII anyway
 #define WINDOW_HEIGHT 240
 #define ASCII_MODE 1
+#define AUTOMATION_BOT_MODE 1
 #define ASCII_WINDOW_WIDTH 150
 #define ASCII_WINDOW_HEIGHT 40
 #define ASCII_LOCAL_PRINT 1 // if 1 then it prints locally on the terminal (mainly debug mode)
@@ -58,6 +59,10 @@
 #define DELETE_CHUNK_RADIUS 14
 #define CHUNK_SIZE 32
 #define COMMIT_INTERVAL 5
+#define BOT_MOVE_DURATION 0.35f // time to move 1 block (approx)
+#define BOT_TURN_DURATION 0.40f // time to complete a rotation
+#define BOT_TURN_ANGLE    90.0f // degrees for left/right turn
+#define BOT_LOOK_ANGLE    15.0f // degrees for up/down pitch
 
 // maxs
 #define MAX_PLAYERS 128

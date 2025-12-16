@@ -14,7 +14,7 @@ struct InputManager {
 static bool _construct_key_command(Window *window, WindowEvent *event, GameCommand *command);
 static void _construct_scroll_command(WindowEvent *event, GameCommand *command);
 static bool _construct_mouse_button_command(Window *window, WindowEvent *event, GameCommand *command);
-#if ASCII_MODE
+#if AUTOMATION_BOT_MODE
     static void _process_ipc_commands(InputManager *manager);
 #endif
 // ========
@@ -23,7 +23,7 @@ void input_manager_update(InputManager *manager, Window *window) {
     if(!manager || !window) {
         return ;
     }
-    #if ASCII_MODE
+    #if AUTOMATION_BOT_MODE
         _process_ipc_commands(manager);
     #endif
     WindowEvent event;
@@ -177,7 +177,7 @@ static bool _construct_mouse_button_command(Window *window, WindowEvent *event, 
     }
     return false;
 }
-#if ASCII_MODE
+#if AUTOMATION_BOT_MODE
 static void _process_ipc_commands(InputManager *manager) {
     IPCCommandEntry ipc_cmd;
     while(ipc_read_command(&ipc_cmd)) {
@@ -187,30 +187,46 @@ static void _process_ipc_commands(InputManager *manager) {
         }
         bool valid = true;
         switch(ipc_cmd.type) {
-            case IPC_CMD_BACKWARD: case IPC_CMD_FORWARD: case IPC_CMD_LEFT: case IPC_CMD_RIGHT: {
+            case IPC_CMD_BACKWARD: case IPC_CMD_FORWARD: case IPC_CMD_LEFT: case IPC_CMD_RIGHT:
                 // im planning to simulate press duration since currently the input sys is continuous events-based
+                game_cmd->type = COMMAND_MOVE_FORWARD+(ipc_cmd.type-IPC_CMD_FORWARD);
+                game_cmd->data.movement.duration = BOT_MOVE_DURATION;
                 break;
-            }
-            case IPC_CMD_FLY: {
+            case IPC_CMD_TURN_LEFT:
+                game_cmd->type = COMMAND_LOOK_YAW;
+                game_cmd->data.look.angle_delta = -BOT_TURN_ANGLE;
+                game_cmd->data.look.duration = BOT_TURN_DURATION;
+                break;
+            case IPC_CMD_TURN_RIGHT:
+                game_cmd->type = COMMAND_LOOK_YAW;
+                game_cmd->data.look.angle_delta = BOT_TURN_ANGLE;
+                game_cmd->data.look.duration = BOT_TURN_DURATION;
+                break;
+            case IPC_CMD_LOOK_UP:
+                game_cmd->type = COMMAND_LOOK_PITCH;
+                game_cmd->data.look.angle_delta = BOT_LOOK_ANGLE;
+                game_cmd->data.look.duration = BOT_TURN_DURATION;
+                break;
+            case IPC_CMD_LOOK_DOWN:
+                game_cmd->type = COMMAND_LOOK_PITCH;
+                game_cmd->data.look.angle_delta = -BOT_LOOK_ANGLE;
+                game_cmd->data.look.duration = BOT_TURN_DURATION;
+                break;
+            case IPC_CMD_FLY:
                 game_cmd->type = COMMAND_TOGGLE_FLY;
                 break;
-            }
-            case IPC_CMD_BUILD: {
+            case IPC_CMD_BUILD:
                 game_cmd->type = COMMAND_BUILD;
                 break;
-            }
-            case IPC_CMD_DESTROY: {
+            case IPC_CMD_DESTROY:
                 game_cmd->type = COMMAND_DESTROY;
                 break;
-            }
-            case IPC_CMD_SELECT_SLOT: {
+            case IPC_CMD_SELECT_SLOT:
                 game_cmd->type = COMMAND_SET_ITEM_INDEX;
                 game_cmd->data.set_item.index = ipc_cmd.value;
                 break;
-            }
-            default: {
+            default:
                 valid = false;
-            }
         }
         if(valid) {
             queue_enqueue(manager->command_queue, game_cmd);

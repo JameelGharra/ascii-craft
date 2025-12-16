@@ -69,9 +69,4 @@
 #define MAX_NAME_LENGTH 32
 #define MAX_CHUNKS 8192
 
-// protocol go server to/from client networking commands
-#define PROTOCOL_CMD_BUILD "build"
-#define PROTOCOL_CMD_DESTROY "destroy"
-#define PROTOCOL_CMD_FLY "toggle_fly"
-
 #endif

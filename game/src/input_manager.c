@@ -192,24 +192,14 @@ static void _process_ipc_commands(InputManager *manager) {
                 game_cmd->type = COMMAND_MOVE_FORWARD+(ipc_cmd.type-IPC_CMD_FORWARD);
                 game_cmd->data.movement.duration = BOT_MOVE_DURATION;
                 break;
-            case IPC_CMD_TURN_LEFT:
+            case IPC_CMD_TURN_LEFT: case IPC_CMD_TURN_RIGHT:
                 game_cmd->type = COMMAND_LOOK_YAW;
-                game_cmd->data.look.angle_delta = -BOT_TURN_ANGLE;
-                game_cmd->data.look.duration = BOT_TURN_DURATION;
+                game_cmd->data.look.angle_delta = (ipc_cmd.type == IPC_CMD_TURN_LEFT) ? -BOT_TURN_ANGLE : BOT_TURN_ANGLE;
+                game_cmd->data.look.duration = BOT_TURN_DURATION;           
                 break;
-            case IPC_CMD_TURN_RIGHT:
-                game_cmd->type = COMMAND_LOOK_YAW;
-                game_cmd->data.look.angle_delta = BOT_TURN_ANGLE;
-                game_cmd->data.look.duration = BOT_TURN_DURATION;
-                break;
-            case IPC_CMD_LOOK_UP:
+            case IPC_CMD_LOOK_UP: case IPC_CMD_LOOK_DOWN:
                 game_cmd->type = COMMAND_LOOK_PITCH;
-                game_cmd->data.look.angle_delta = BOT_LOOK_ANGLE;
-                game_cmd->data.look.duration = BOT_TURN_DURATION;
-                break;
-            case IPC_CMD_LOOK_DOWN:
-                game_cmd->type = COMMAND_LOOK_PITCH;
-                game_cmd->data.look.angle_delta = -BOT_LOOK_ANGLE;
+                game_cmd->data.look.angle_delta = (ipc_cmd.type == IPC_CMD_LOOK_UP) ? BOT_LOOK_ANGLE : -BOT_LOOK_ANGLE;
                 game_cmd->data.look.duration = BOT_TURN_DURATION;
                 break;
             case IPC_CMD_FLY:

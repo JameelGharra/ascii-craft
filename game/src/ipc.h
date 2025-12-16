@@ -17,15 +17,27 @@
 
 typedef enum {
     IPC_CMD_NONE = 0,
+    // movement with duration
     IPC_CMD_FORWARD,
     IPC_CMD_BACKWARD,
     IPC_CMD_LEFT,
     IPC_CMD_RIGHT,
+    // actions
     IPC_CMD_JUMP,
     IPC_CMD_FLY,
     IPC_CMD_BUILD,
     IPC_CMD_DESTROY,
-    IPC_CMD_SELECT_SLOT // 1-9 for item selection
+    IPC_CMD_SELECT_SLOT, // 1-9 for item selection
+    // looks with angle and duration
+    IPC_CMD_TURN_LEFT,  // yaw -90
+    IPC_CMD_TURN_RIGHT, // yaw +90
+    IPC_CMD_LOOK_UP,    // pitch +15
+    IPC_CMD_LOOK_DOWN,  // pitch -15
+    // casual jumps
+    IPC_CMD_JUMP_FORWARD,
+    IPC_CMD_JUMP_BACKWARD,
+    IPC_CMD_JUMP_LEFT,
+    IPC_CMD_JUMP_RIGHT,
 } IPCCommandType;
 
 typedef struct {

@@ -16,7 +16,20 @@ typedef enum {
     COMMAND_SCROLL,
     COMMAND_MIDDLE_COPY_ELEMENT, // middle click
     COMMAND_TOGGLE_LIGHT,
-    COMMAND_TOGGLE_ORTHO_MODE, // F key for 2D like orthographic projection
+    
+    // duration based movement
+    COMMAND_MOVE_FORWARD,
+    COMMAND_MOVE_BACKWARD,
+    COMMAND_MOVE_LEFT,
+    COMMAND_MOVE_RIGHT,
+
+    // angle + duration based camera movement
+    COMMAND_LOOK_YAW, // for left/right
+    COMMAND_LOOK_PITCH, // for up/down
+    
+    // kinda useless since we have casual jumps, but might be helpful in future features
+    COMMAND_JUMP, 
+
 } GameCommandType;
 
 typedef struct {
@@ -28,6 +41,14 @@ typedef struct {
         struct {
             double y_delta; // y offset for scrolling
         } cycle_item;
+        struct {
+            float duration; // mimicking holding key in seconds
+            bool jump;
+        } movement;
+        struct {
+            float angle_delta;
+            float duration; // how fast to turn (smoothness)
+        } look;
     } data;
 } GameCommand;
 

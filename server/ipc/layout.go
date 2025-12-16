@@ -10,16 +10,24 @@ const (
 )
 
 const (
-	CmdNone       = 0
-	CmdForward    = 1
-	CmdBackward   = 2
-	CmdLeft       = 3
-	CmdRight      = 4
-	CmdJump       = 5
-	CmdFly        = 6
-	CmdBuild      = 7
-	CmdDestroy    = 8
-	CmdSelectSlot = 9
+	CmdNone         = 0
+	CmdForward      = 1
+	CmdBackward     = 2
+	CmdLeft         = 3
+	CmdRight        = 4
+	CmdJump         = 5
+	CmdFly          = 6
+	CmdBuild        = 7
+	CmdDestroy      = 8
+	CmdSelectSlot   = 9
+	CmdTurnLeft     = 10
+	CmdTurnRight    = 11
+	CmdLookUp       = 12
+	CmdLookDown     = 13
+	CmdJumpForward  = 14
+	CmdJumpBackward = 15
+	CmdJumpLeft     = 16
+	CmdJumpRight    = 17
 )
 
 type SharedMemoryLayout struct {

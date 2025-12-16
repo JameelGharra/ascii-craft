@@ -405,6 +405,12 @@ void handle_commands(const WorldQuery *world_query) {
                 }
                 break;
             }
+            case COMMAND_JUMP: {
+                g->automation_bot->holding_jump = true;
+                g->automation_bot->active_move_dir = MOVE_DIR_NONE;
+                g->automation_bot->move_timer = command.data.movement.duration;
+                break;
+            }
             #endif
         }
     }

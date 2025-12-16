@@ -222,6 +222,11 @@ static void _process_ipc_commands(InputManager *manager) {
                 game_cmd->type = COMMAND_SET_ITEM_INDEX;
                 game_cmd->data.set_item.index = ipc_cmd.value;
                 break;
+            case IPC_CMD_JUMP:
+                game_cmd->type = COMMAND_JUMP;
+                game_cmd->data.movement.duration = BOT_MOVE_DURATION;
+                game_cmd->data.movement.jump = true;
+                break;
             default:
                 valid = false;
         }

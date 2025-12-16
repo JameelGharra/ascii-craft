@@ -26,6 +26,9 @@ typedef enum {
     // angle + duration based camera movement
     COMMAND_LOOK_YAW, // for left/right
     COMMAND_LOOK_PITCH, // for up/down
+    
+    // kinda useless since we have casual jumps, but might be helpful in future features
+    COMMAND_JUMP, 
 
 } GameCommandType;
 

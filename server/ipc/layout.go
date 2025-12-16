@@ -20,6 +20,10 @@ const (
 	CmdBuild      = 7
 	CmdDestroy    = 8
 	CmdSelectSlot = 9
+	CmdTurnLeft   = 10
+	CmdTurnRight  = 11
+	CmdLookUp     = 12
+	CmdLookDown   = 13
 )
 
 type SharedMemoryLayout struct {

@@ -1,4 +1,6 @@
 #include "automation_bot.h"
+#include <math.h>
+#include "util.h"
 
 void automation_bot_reset(AutomationBot *bot) {
     if (!bot) {
@@ -44,6 +46,14 @@ void automation_bot_look_update(AutomationBot *bot, Player *player, double dt) {
             // finishing the rotation
             player->state.rx = bot->target_rx;
             player->state.ry = bot->target_ry;
+            // normalizing yaw rx to [0, 2PI)
+            // this prevents float precision degradation after thousands of turns
+            while (player->state.rx < 0.0f) {
+                player->state.rx += (float)(2.0 * PI);
+            }
+            while (player->state.rx >= (float)(2.0 * PI)) {
+                player->state.rx -= (float)(2.0 * PI);
+            }
             bot->is_rotating = false;
         } else {
             // interpolate (simple lerp)

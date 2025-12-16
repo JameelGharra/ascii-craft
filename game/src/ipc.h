@@ -33,6 +33,11 @@ typedef enum {
     IPC_CMD_TURN_RIGHT, // yaw +90
     IPC_CMD_LOOK_UP,    // pitch +15
     IPC_CMD_LOOK_DOWN,  // pitch -15
+    // casual jumps
+    IPC_CMD_JUMP_FORWARD,
+    IPC_CMD_JUMP_BACKWARD,
+    IPC_CMD_JUMP_LEFT,
+    IPC_CMD_JUMP_RIGHT,
 } IPCCommandType;
 
 typedef struct {

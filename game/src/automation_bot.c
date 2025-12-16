@@ -9,6 +9,7 @@ void automation_bot_reset(AutomationBot *bot) {
     bot->active_move_dir = MOVE_DIR_NONE;
     bot->move_timer = 0.0f;
     bot->is_rotating = false;
+    bot->holding_jump = false;
     bot->rotate_timer = 0.0f;
     bot->rotate_duration = 0.0f;
     bot->start_rx = 0.0f;
@@ -29,8 +30,11 @@ void automation_bot_pos_update(AutomationBot *bot, Player *player, PlayerMovemen
             case MOVE_DIR_LEFT: move_intent->left = true; break;
             case MOVE_DIR_RIGHT: move_intent->right = true; break;
         }
+        move_intent->jump = bot->holding_jump;
+
         if (bot->move_timer <= 0) {
             bot->active_move_dir = MOVE_DIR_NONE; // stop
+            bot->holding_jump = false;
         }
     }
 }

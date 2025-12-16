@@ -191,6 +191,13 @@ static void _process_ipc_commands(InputManager *manager) {
                 // im planning to simulate press duration since currently the input sys is continuous events-based
                 game_cmd->type = COMMAND_MOVE_FORWARD+(ipc_cmd.type-IPC_CMD_FORWARD);
                 game_cmd->data.movement.duration = BOT_MOVE_DURATION;
+                game_cmd->data.movement.jump = false;
+                break;
+            case IPC_CMD_JUMP_FORWARD: case IPC_CMD_JUMP_BACKWARD:
+            case IPC_CMD_JUMP_LEFT: case IPC_CMD_JUMP_RIGHT:
+                game_cmd->type = COMMAND_MOVE_FORWARD+(ipc_cmd.type-IPC_CMD_JUMP_FORWARD);
+                game_cmd->data.movement.duration = BOT_MOVE_DURATION;
+                game_cmd->data.movement.jump = true;
                 break;
             case IPC_CMD_TURN_LEFT: case IPC_CMD_TURN_RIGHT:
                 game_cmd->type = COMMAND_LOOK_YAW;

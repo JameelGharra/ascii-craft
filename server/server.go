@@ -120,6 +120,16 @@ func processCommand(client *ipc.Client, text string) {
 	case "!right", "!d":
 		op = ipc.CmdRight
 
+	// jumps
+	case "!jumpforward", "!jf":
+		op = ipc.CmdJumpForward
+	case "!jumpbackward", "!jb":
+		op = ipc.CmdJumpBackward
+	case "!jumpleft", "!jl":
+		op = ipc.CmdJumpLeft
+	case "!jumpright", "!jr":
+		op = ipc.CmdJumpRight
+
 	// camera
 	case "!turnleft", "!l":
 		op = ipc.CmdTurnLeft

@@ -369,6 +369,7 @@ void handle_commands(const WorldQuery *world_query) {
             case COMMAND_MOVE_LEFT: case COMMAND_MOVE_RIGHT: {
                 g->automation_bot->active_move_dir = command.type - COMMAND_MOVE_FORWARD + 1;
                 g->automation_bot->move_timer = command.data.movement.duration;
+                g->automation_bot->holding_jump = command.data.movement.jump;
                 break;
             }
             case COMMAND_LOOK_YAW: {
@@ -479,12 +480,12 @@ int main(int argc, char **argv)
         previous = now;
 
         // ACTIONS //
-        handle_mouse_input(dt);
-        input_manager_update(g->input_manager, g->window);
         update_ortho_zoom();
-        handle_key_movement(me, world_query, dt); // continuous
+        input_manager_update(g->input_manager, g->window);
         handle_commands(world_query);
-
+        handle_mouse_input(dt);
+        handle_key_movement(me, world_query, dt); // continuous
+        
         // FLUSH DATABASE //
         if (now - last_commit > COMMIT_INTERVAL) {
             last_commit = now;

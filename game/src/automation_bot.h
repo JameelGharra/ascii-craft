@@ -15,6 +15,7 @@ enum MoveDirection {
 typedef struct {
     int active_move_dir;
     float move_timer;
+    bool holding_jump;
 
     bool is_rotating;
     float rotate_timer;

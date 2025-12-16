@@ -40,6 +40,7 @@ typedef struct {
         } cycle_item;
         struct {
             float duration; // mimicking holding key in seconds
+            bool jump;
         } movement;
         struct {
             float angle_delta;

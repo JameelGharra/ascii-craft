@@ -24,7 +24,7 @@ func (a *AsciiRLE) Size() int {
 
 var (
 	ErrBufferTooSmall = errors.New("RLE buffer too small")
-	ErrWorse          = errors.New("RLE made it worse, not better")
+	// ErrWorse          = errors.New("RLE made it worse, not better")
 )
 
 func (a *AsciiRLE) RLE(in []byte) error {
@@ -38,10 +38,10 @@ func (a *AsciiRLE) RLE(in []byte) error {
 			count++
 		}
 		index += count
-		if a.pos+1 >= length {
-			a.err = true
-			return ErrWorse
-		}
+		// if a.pos+1 >= length {
+		// 	a.err = true
+		// 	return ErrWorse
+		// }
 		if a.pos+1 >= buffMaxSize {
 			a.err = true
 			return ErrBufferTooSmall

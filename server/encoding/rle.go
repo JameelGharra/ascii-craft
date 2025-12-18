@@ -2,6 +2,8 @@ package encoding
 
 import (
 	"errors"
+
+	"github.com/JameelGharra/ascii-craft/server/ascii"
 )
 
 type AsciiRLE struct {
@@ -10,7 +12,7 @@ type AsciiRLE struct {
 	err    bool
 }
 
-func NewAsciiRLE(maxSize int) *AsciiRLE {
+func NewAsciiRLE(maxSize uint32) *AsciiRLE {
 	return &AsciiRLE{
 		buffer: make([]byte, maxSize),
 		pos:    0,
@@ -27,14 +29,14 @@ var (
 	// ErrWorse          = errors.New("RLE made it worse, not better")
 )
 
-func (a *AsciiRLE) RLE(in []byte) error {
-	length := len(in)
+func (a *AsciiRLE) RLE(in *ascii.AsciiFrame) error {
+	length := len(in.Buffer)
 	buffMaxSize := len(a.buffer)
 	count := 1
 	for index := 0; index < length; {
 		count = 1
-		current := in[index]
-		for index+count < length && in[index+count] == current && count < 255 {
+		current := in.Buffer[index]
+		for index+count < length && in.Buffer[index+count] == current && count < 255 {
 			count++
 		}
 		index += count

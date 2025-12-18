@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/encoding"
 	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
@@ -108,9 +109,8 @@ initLoop:
 		}
 	}
 
-	pixelCount := width * height
-	planarBuf := make([]byte, pixelCount*2)
-	rleEncoder := encoding.NewAsciiRLE(len(planarBuf) * 2) // I removed the WorstErr panic from RLE encoder for this test
+	frameEncoder := encoding.NewFrameEncoder(uint32(width), uint32(height))
+	planarAsciiFrame := ascii.NewAsciiFrame(uint32(width), uint32(height))
 
 	var stats []CompressionStat
 	var totalOriginal int64
@@ -148,18 +148,16 @@ initLoop:
 
 		lastFrameTime = time.Now()
 
-		encoding.SeperateCharsColor(frame.Pixels, planarBuf)
+		frame.Planar(planarAsciiFrame)
+		result, err := frameEncoder.Encode(planarAsciiFrame)
 
-		rleEncoder.Reset()
-		err := rleEncoder.RLE(planarBuf)
-
-		origSize := len(planarBuf)
+		origSize := len(planarAsciiFrame.Buffer)
 		compSize := 0
 
 		if err != nil {
-			t.Fatalf("RLE Error at frame %d: %v", frameNum, err)
+			t.Fatalf("Encoding Error at frame %d: %v", frameNum, err)
 		} else {
-			compSize = rleEncoder.Size()
+			compSize = len(result)
 		}
 
 		ratio := 100.0 * (1.0 - (float64(compSize) / float64(origSize))) // saved percentage

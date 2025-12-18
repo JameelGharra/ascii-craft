@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
 
@@ -24,7 +25,9 @@ func TestSimpleAsciiRLE(t *testing.T) {
 		2, 2,
 	}
 	rle := NewAsciiRLE(8)
-	err := rle.RLE(input)
+	frame := ascii.NewAsciiFrame(2, 2)
+	frame.Push(input)
+	err := rle.RLE(frame)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -43,7 +46,14 @@ func TestSimpleAsciiRLEWorse(t *testing.T) {
 		1, 2, 3, 4, 5, 6,
 	}
 	rle := NewAsciiRLE(6)
-	rle.RLE(input)
+	frame := ascii.NewAsciiFrame(3, 1)
+	frame.Push(input)
+	rle.RLE(frame)
+	result := rle.Result()
+
+	if result != nil {
+		t.Fatalf("Expected RLE to be worse, but got a better result")
+	}
 	// if err != ErrWorse {
 	// 	t.Fatalf("Expected ErrWorse, got %v", err)
 	// }
@@ -72,28 +82,27 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 	}()
 
 	fmt.Println("Starting C process...")
-	time.Sleep(1 * time.Second) // to wait for C to create the shared memory
+	// time.Sleep(2 * time.Second) // to wait for C to create the shared memory
 	var client *ipc.Client
-	for range 10 { // retry for additional total 2 secs
-		time.Sleep(200 * time.Millisecond)
+	for range 10 { // retry for additional total 5 secs
+		time.Sleep(500 * time.Millisecond)
 		client, err = ipc.NewClient()
 		if err == nil {
 			break
 		}
 	}
 	if client == nil {
-		t.Fatal("Could not connect to IPC after 2 seconds")
+		t.Fatal("Could not connect to IPC after 5 seconds")
 	}
 	defer client.Close()
 	frame, ok := client.TryReadFrame()
 	if !ok {
 		t.Fatalf("Failed to read frame from IPC")
 	}
-	pixelCount := len(frame.Pixels)
-	input := make([]byte, pixelCount*2)
-	SeperateCharsColor(frame.Pixels, input)
-	rle := NewAsciiRLE(len(input) * 2) // I doubled it just to make sure it prints the result even if worse
-	err = rle.RLE(input)
+	planaredFrame := ascii.NewAsciiFrame(frame.Width, frame.Height)
+	frame.Planar(planaredFrame)
+	rle := NewAsciiRLE(frame.Height * frame.Width * 4) // I doubled it just to make sure it prints the result even if worse
+	err = rle.RLE(planaredFrame)
 	if err != nil {
 		t.Fatalf("Unexpected error during RLE: %v", err)
 	}
@@ -102,8 +111,8 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 		t.Fatal("RLE failed. Result is nil")
 
 	}
-	if len(result) >= len(input) {
-		t.Fatalf("RLE did not improve size. Original: %d, RLE: %d", len(input), len(result))
+	if len(result) >= len(planaredFrame.Buffer) {
+		t.Fatalf("RLE did not improve size. Original: %d, RLE: %d", len(planaredFrame.Buffer), len(result))
 	}
-	fmt.Printf("Original size: %d, RLE size: %d\n", len(input), len(result))
+	fmt.Printf("Original size: %d, RLE size: %d\n", len(planaredFrame.Buffer), len(result))
 }

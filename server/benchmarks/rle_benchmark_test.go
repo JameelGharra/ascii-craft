@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	TotalFrames = 10000
+	TotalFrames = 5000
 )
 
 type CompressionStat struct {
@@ -119,6 +119,8 @@ initLoop:
 	startBench := time.Now()
 	lastFrameTime := time.Now()
 
+	charsFreq := ascii.NewFrequency()
+	colorsFreq := ascii.NewFrequency()
 	for frameNum := 0; frameNum < TotalFrames; {
 
 		select {
@@ -149,6 +151,8 @@ initLoop:
 		lastFrameTime = time.Now()
 
 		frame.Planar(planarAsciiFrame)
+		charsFreq.Count(planarAsciiFrame.Buffer[:len(planarAsciiFrame.Buffer)/2])
+		colorsFreq.Count(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:])
 		result, err := frameEncoder.Encode(planarAsciiFrame)
 
 		origSize := len(planarAsciiFrame.Buffer)
@@ -224,4 +228,6 @@ initLoop:
 	if avgRatio < 0 {
 		t.Errorf("RLE is performing worse than raw data on average!")
 	}
+	fmt.Printf("CHARS FREQ.: %s\n", charsFreq.Debug())
+	fmt.Printf("COLORS FREQ.: %s\n", colorsFreq.Debug())
 }

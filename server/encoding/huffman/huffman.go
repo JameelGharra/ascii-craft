@@ -2,13 +2,14 @@ package huffman
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
 )
 
+const SizePerNodeField = 2
+
 type HuffmanNode struct {
-	value byte
+	value int
 	count int
 	left  *HuffmanNode
 	right *HuffmanNode
@@ -21,24 +22,15 @@ func (h *HuffmanNode) String() string {
 	return fmt.Sprintf("HuffmanNode(value=%d, count=%d)", h.value, h.count)
 }
 
-func (h *HuffmanNode) debug(indent int) string {
-	indentStr := strings.Repeat(" ", indent*2)
-	if h == nil {
-		return fmt.Sprintf("%s-> nil\n", indentStr)
-	}
-	return fmt.Sprintf("%s->%s\n", indentStr, h.String()) +
-		h.left.debug(indent+1) +
-		h.right.debug(indent+1)
-}
-
-func fromValue(value byte) *HuffmanNode {
-	return &HuffmanNode{
-		value: value,
-		count: 1,
-		left:  nil,
-		right: nil,
-	}
-}
+// func (h *HuffmanNode) debug(indent int) string {
+// 	indentStr := strings.Repeat(" ", indent*2)
+// 	if h == nil {
+// 		return fmt.Sprintf("%s-> nil\n", indentStr)
+// 	}
+// 	return fmt.Sprintf("%s->%s\n", indentStr, h.String()) +
+// 		h.left.debug(indent+1) +
+// 		h.right.debug(indent+1)
+// }
 
 func join(a, b *HuffmanNode) *HuffmanNode {
 	return &HuffmanNode{

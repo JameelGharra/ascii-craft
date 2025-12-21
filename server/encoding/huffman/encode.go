@@ -10,11 +10,11 @@ import (
 
 var ErrHuffmanTooLarge = errors.New("huffman tree is so large")
 
-const HUFFMAN_ENCODE_LENGTH = 5
+const HuffmanEncodeLength = 6
 
 func Encode(freq *ascii.FreqTable) ([]byte, error) {
 	nodes := make(PriorityQueue, freq.TotalDifferentChars)
-	for i, point := range freq.Points {
+	for i, point := range freq.Entries {
 		nodes[i] = fromFreq(point)
 	}
 	heap.Init(&nodes)
@@ -28,7 +28,7 @@ func Encode(freq *ascii.FreqTable) ([]byte, error) {
 		count += 2
 	}
 	head := heap.Pop(&nodes).(*HuffmanNode)
-	data := make([]byte, count*HUFFMAN_ENCODE_LENGTH)
+	data := make([]byte, count*HuffmanEncodeLength)
 	serializeTree(head, data, 0)
 
 	return data, nil
@@ -39,23 +39,26 @@ func serializeTree(node *HuffmanNode, data []byte, index int) int { // zero wast
 		return index
 	}
 
-	utils.Assert(index+2 < len(data), "Index will exceed data length.")
+	utils.Assert(index+5 < len(data), "Index will exceed data length.")
 
-	leftIndex := index + HUFFMAN_ENCODE_LENGTH
-	data[index] = node.value
+	leftIndex := index + HuffmanEncodeLength
 
-	data[index+1] = 0
-	data[index+2] = 0
+	utils.Write16(data, index, node.value)
+
+	leftFieldStart := index + SizePerNodeField
+	rightFieldStart := leftFieldStart + SizePerNodeField
+	utils.Write16(data, leftFieldStart, 0)
+	utils.Write16(data, rightFieldStart, 0)
 
 	next := leftIndex
 
 	if node.left != nil {
-		data[index+1] = byte(leftIndex)
+		utils.Write16(data, leftFieldStart, leftIndex)
 		next = serializeTree(node.left, data, leftIndex)
 	}
 
 	if node.right != nil {
-		data[index+2] = byte(next)
+		utils.Write16(data, rightFieldStart, next)
 		next = serializeTree(node.right, data, next)
 	}
 	return next

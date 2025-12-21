@@ -3,60 +3,61 @@ package ascii
 import (
 	"fmt"
 	"slices"
+	"strings"
+
+	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
 type FreqTable struct {
-	Buffer              [256]int
-	Points              []*FreqEntry
+	Entries             []*FreqEntry
 	TotalDifferentChars int
-	pointsCache         [256]*FreqEntry // to avoid finding point on need
+	entriesCache        map[int]*FreqEntry // to avoid finding point on need
 }
 type FreqEntry struct {
-	Value byte
+	Value int
 	Count int
 }
 
 func NewFrequency() *FreqTable {
 	return &FreqTable{
-		Buffer:              [256]int{},
-		Points:              make([]*FreqEntry, 0),
-		pointsCache:         [256]*FreqEntry{},
+		Entries:             make([]*FreqEntry, 0),
+		entriesCache:        make(map[int]*FreqEntry),
 		TotalDifferentChars: 0,
 	}
 }
 
 func (f *FreqTable) Reset() {
 	f.TotalDifferentChars = 0
-	for i := range 256 {
-		f.Buffer[i] = 0
-		// should reset points and cache here, but kept this for the 5,000 frames benchmark, will do it laters
-	}
+	f.Entries = make([]*FreqEntry, 0)
+	f.entriesCache = map[int]*FreqEntry{}
 }
 
-func (f *FreqTable) Count(data []byte) {
-	for _, b := range data {
-		if f.Buffer[b] == 0 {
-			f.TotalDifferentChars++
-			point := &FreqEntry{
-				Count: 0,
+func (f *FreqTable) Count(dataIterator utils.IByteIterator) {
+	for dataIterator.HasNext() {
+		b := dataIterator.Next()
+		entry, exists := f.entriesCache[int(b)]
+		if !exists {
+			entry = &FreqEntry{
 				Value: b,
+				Count: 0,
 			}
-			f.Points = append(f.Points, point)
-			f.pointsCache[b] = point
+			f.entriesCache[int(b)] = entry
+			f.Entries = append(f.Entries, entry)
+			f.TotalDifferentChars++
 		}
-		f.Buffer[b]++
-		f.pointsCache[b].Count++
+		entry.Count++
 	}
 }
 
 func (f *FreqTable) Debug() string {
-	points := make([]*FreqEntry, len(f.Points))
-	copy(points, f.Points)
+	points := make([]*FreqEntry, len(f.Entries))
+	copy(points, f.Entries)
 	slices.SortFunc(points, func(a, b *FreqEntry) int {
 		return a.Count - b.Count
 	})
 
-	out := fmt.Sprintf("Frequency(%d): ", len(points))
+	var out strings.Builder
+	out.WriteString(fmt.Sprintf("Frequency(%d): ", len(points)))
 	top := 0
 	bottom := 0
 	for i, p := range points {
@@ -65,10 +66,10 @@ func (f *FreqTable) Debug() string {
 		} else {
 			bottom += p.Count
 		}
-		out += fmt.Sprintf("%s(%d) ", string(p.Value), p.Count)
+		fmt.Fprintf(&out, "%s(%d) ", string(rune(p.Value)), p.Count)
 	}
 
-	out += fmt.Sprintf("-- top %d bottom %d diff %d", top, bottom, top-bottom)
+	out.WriteString(fmt.Sprintf("-- top %d bottom %d diff %d", top, bottom, top-bottom))
 
-	return out
+	return out.String()
 }

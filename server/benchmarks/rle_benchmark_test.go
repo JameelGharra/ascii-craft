@@ -12,6 +12,7 @@ import (
 	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/encoding"
 	"github.com/JameelGharra/ascii-craft/server/ipc"
+	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
 const (
@@ -151,8 +152,10 @@ initLoop:
 		lastFrameTime = time.Now()
 
 		frame.Planar(planarAsciiFrame)
-		charsFreq.Count(planarAsciiFrame.Buffer[:len(planarAsciiFrame.Buffer)/2])
-		colorsFreq.Count(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:])
+		charsData := utils.New8BitIterator(planarAsciiFrame.Buffer[:len(planarAsciiFrame.Buffer)/2])
+		colorsData := utils.New8BitIterator(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:])
+		charsFreq.Count(charsData)
+		colorsFreq.Count(colorsData)
 		result, err := frameEncoder.Encode(planarAsciiFrame)
 
 		origSize := len(planarAsciiFrame.Buffer)

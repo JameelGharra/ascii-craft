@@ -92,7 +92,7 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 	}()
 
 	fmt.Println("Starting C process...")
-	// time.Sleep(2 * time.Second) // to wait for C to create the shared memory
+	time.Sleep(2 * time.Second) // to wait for C to create the shared memory
 	var client *ipc.Client
 	for range 10 { // retry for additional total 5 secs
 		time.Sleep(500 * time.Millisecond)

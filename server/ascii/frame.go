@@ -48,7 +48,6 @@ func (f *AsciiFrame) Push(data []byte) *AsciiFrame {
 
 // will return itself after xor params
 func (f *AsciiFrame) Xor(a, b *AsciiFrame) *AsciiFrame {
-
 	utils.Assert(a.Width == b.Width && a.Height == b.Height, "Frame sizes must match for diffing")
 	for i := 0; i < len(a.Buffer); i++ {
 		f.Buffer[i] = a.Buffer[i] ^ b.Buffer[i]

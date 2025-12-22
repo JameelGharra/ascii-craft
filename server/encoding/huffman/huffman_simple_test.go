@@ -18,11 +18,12 @@ func TestSimpleHuffman(t *testing.T) {
 			'C', 'D',
 		}))
 
-	data, err := Encode(freq)
+	res := NewHuffmanResultTable()
+	data, err := Encode(freq, res)
 	if err != nil {
 		t.Fatalf("Failed to encode huffman: %v", err)
 	}
-	fmt.Printf("huffman data: %v\n", data)
+	fmt.Printf("huffman serialization: %v\n", data)
 
 	if !bytes.Equal(data, []byte{
 		0, 0, 0, HuffmanEncodeLength, 0, HuffmanEncodeLength * 2,
@@ -41,5 +42,24 @@ func TestSimpleHuffman(t *testing.T) {
 		// 'C', 0, 0, // 111
 	}) {
 		t.Fatalf("Huffman data encoded is incorrect.")
+	}
+	// checking table results
+	expectedCodes := map[int][]byte{
+		'A': {0},
+		'B': {1, 0},
+		'D': {1, 1, 0},
+		'C': {1, 1, 1},
+	}
+	for value, expectedCode := range expectedCodes {
+		code, exists := res.ValToCode[value]
+		if !exists {
+			t.Fatalf("Expected huffman code for value %d to exist", value)
+		}
+		if !bytes.Equal(code, expectedCode) {
+			t.Fatalf("Expected huffman code for value %d to be %v, got %v", value, expectedCode, code)
+		}
+	}
+	if res.CodeMaxLen != 3 {
+		t.Fatalf("Expected max huffman code length to be 3, got %d", res.CodeMaxLen)
 	}
 }

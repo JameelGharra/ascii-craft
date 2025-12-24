@@ -98,3 +98,29 @@ func TestSimpleHuffmanEncodeStream(t *testing.T) {
 		t.Fatalf("Expected encoded output to be %v, got %v", expectedOut, out[:tillIndex])
 	}
 }
+
+func TestSimpleHuffmanDecodeStream(t *testing.T) {
+	freq := constructSimpleFreqTable()
+	huffman, err := NewHuffman(freq)
+	if err != nil {
+		t.Fatalf("Failed to create huffman: %v", err)
+	}
+	encodedData := []byte{
+		0b01011111,
+		0,
+	}
+	bitLength := 9
+	writer := utils.ByteWriter8{}
+	writerBuffer := make([]byte, 10)
+	writer.Set(writerBuffer)
+	err = huffman.Decode(encodedData, bitLength, &writer)
+	if err != nil {
+		t.Fatalf("Failed to decode data: %v", err)
+	}
+	expectedDecoded := []byte{
+		'A', 'B', 'C', 'D',
+	}
+	if !bytes.Equal(writerBuffer[:writer.Len()], expectedDecoded) {
+		t.Fatalf("Expected decoded data to be %v, got %v", expectedDecoded, writerBuffer[:writer.Len()])
+	}
+}

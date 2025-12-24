@@ -6,72 +6,73 @@ import (
 	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
-const InvalidDecodeResult = -1 // nor color or character can have that value
-var ErrHuffmanDecodeInvalidBit = errors.New("huffman decode invalid bit input")
-var ErrHuffmanDecodeNotFound = errors.New("huffman decode did not find a valid value")
-var ErrHuffmanDecodeInvalidStepCount = errors.New("huffman decode exceeded valid step count")
+const (
+	bitIndicatorLeft  = 0
+	bitIndicatorRight = 1
+)
 
-type HuffmanDecoder struct {
-	serializedTree    *[]byte
-	serializationSize int
+var (
+	ErrHuffmanDecodeInvalidBitDirection = errors.New("invalid bit direction for huffman decode traverser (has to be 0/1)")
+	ErrHuffmanDecodeExceedsTreeBounds   = errors.New("huffman decode traverser exceeded tree bounds")
+)
+
+type HuffmanTreeDecodeTraverser struct {
+	currentTreeIndex int // 16 bit for indexing
+	serializedTree   []byte
 }
 
-func NewHuffmanDecoder(serializedTree *[]byte) *HuffmanDecoder {
-	return &HuffmanDecoder{
-		serializedTree:    serializedTree,
-		serializationSize: len(*serializedTree),
+func NewHuffmanTreeDecodeTraverser(serializedTree []byte) *HuffmanTreeDecodeTraverser {
+	return &HuffmanTreeDecodeTraverser{
+		currentTreeIndex: 0,
+		serializedTree:   serializedTree,
 	}
 }
 
-func isLeaf(nodeIndex int, serializedTree *[]byte) bool {
-	leftIndex := utils.Read16(*serializedTree, nodeIndex+sizePerNodeField)
-	rightIndex := utils.Read16(*serializedTree, nodeIndex+2*sizePerNodeField)
-	return leftIndex == 0 && rightIndex == 0
+// left and right will return the next huff node start index
+func (h *HuffmanTreeDecodeTraverser) goLeft() (int, error) {
+	leftFieldStart := h.currentTreeIndex + sizePerNodeField
+	if leftFieldStart >= len(h.serializedTree) {
+		return 0, ErrHuffmanDecodeExceedsTreeBounds
+	}
+	return utils.Read16(h.serializedTree, leftFieldStart), nil
 }
 
-func (h *HuffmanDecoder) decodeAttempt(encodedBits utils.IByteIterator) (int, error) {
-	currentIndex, stepsCount := 0, 0
-	for encodedBits.HasNext() {
-		bit := encodedBits.Next()
-		nextIndex := 0
-		switch bit {
-		case 0:
-			nextIndex = utils.Read16(*h.serializedTree, currentIndex+sizePerNodeField)
-		case 1:
-			nextIndex = utils.Read16(*h.serializedTree, currentIndex+2*sizePerNodeField)
-		default:
-			return -1, ErrHuffmanDecodeInvalidBit
-		}
-		if nextIndex == 0 {
-			return InvalidDecodeResult, ErrHuffmanDecodeNotFound
-		}
-		// checked now to not eat the next bit for nothing
-		if isLeaf(nextIndex, h.serializedTree) {
-			return utils.Read16(*h.serializedTree, nextIndex), nil
-		}
-		currentIndex = nextIndex
-		stepsCount++
-		if stepsCount > h.serializationSize {
-			return InvalidDecodeResult, ErrHuffmanDecodeInvalidStepCount
-		}
+func (h *HuffmanTreeDecodeTraverser) isLeaf() (bool, error) {
+	leftFieldStart := h.currentTreeIndex + sizePerNodeField
+	rightFieldStart := h.currentTreeIndex + 2*sizePerNodeField
+	if leftFieldStart >= len(h.serializedTree) || rightFieldStart >= len(h.serializedTree) {
+		return false, ErrHuffmanDecodeExceedsTreeBounds
 	}
-	return InvalidDecodeResult, ErrHuffmanDecodeNotFound
+	return (utils.Read16(h.serializedTree, leftFieldStart) == 0 &&
+		utils.Read16(h.serializedTree, rightFieldStart) == 0), nil
 }
+func (h *HuffmanTreeDecodeTraverser) goRight() (int, error) {
+	rightFieldStart := h.currentTreeIndex + 2*sizePerNodeField
+	if rightFieldStart >= len(h.serializedTree) {
+		return 0, ErrHuffmanDecodeExceedsTreeBounds
+	}
+	return utils.Read16(h.serializedTree, rightFieldStart), nil
+}
+func (h *HuffmanTreeDecodeTraverser) TraverseStep(bitDirection byte) (isLeaf bool, value int, err error) {
+	switch bitDirection {
+	case bitIndicatorLeft:
+		h.currentTreeIndex, err = h.goLeft()
+	case bitIndicatorRight:
+		h.currentTreeIndex, err = h.goRight()
+	default:
+		return false, 0, ErrHuffmanDecodeInvalidBitDirection
+	}
 
-func (h *HuffmanDecoder) Decode(encodedBits utils.IByteIterator, encodedBitsLen int, writer utils.ByteWriter) error {
-	// for an edge case where the tree has 1 node
-	if isLeaf(0, h.serializedTree) {
-		for range encodedBitsLen { // a val is 1 bit here
-			writer.Write(utils.Read16(*h.serializedTree, 0))
-		}
-		return nil
+	if err != nil {
+		return false, 0, err
 	}
-	for encodedBits.HasNext() {
-		result, err := h.decodeAttempt(encodedBits)
-		if err != nil {
-			return err
-		}
-		writer.Write(result)
+	isLeaf, err = h.isLeaf()
+	if err != nil {
+		return false, 0, err
 	}
-	return nil
+	value = utils.Read16(h.serializedTree, h.currentTreeIndex)
+	if isLeaf {
+		h.currentTreeIndex = 0 // for next run
+	}
+	return isLeaf, value, nil
 }

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	TotalFrames = 5000
+	TotalFrames = 1000
 )
 
 type CompressionStat struct {

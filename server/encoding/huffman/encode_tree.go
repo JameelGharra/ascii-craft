@@ -12,7 +12,7 @@ var ErrHuffmanTooLarge = errors.New("huffman tree is so large")
 
 const HuffmanEncodeLength = 6
 
-func Encode(freq *ascii.FreqTable, res *HuffmanResultTable) ([]byte, error) {
+func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte, error) {
 	nodes := make(PriorityQueue, freq.TotalDifferentChars)
 	for i, point := range freq.Entries {
 		nodes[i] = fromFreq(point)
@@ -34,7 +34,7 @@ func Encode(freq *ascii.FreqTable, res *HuffmanResultTable) ([]byte, error) {
 	return data, nil
 }
 
-func serializeTree(node *HuffmanNode, data *[]byte, res *HuffmanResultTable, index int) int { // zero waste space strategy
+func serializeTree(node *HuffmanNode, data *[]byte, res *HuffmanEncodeResultTable, index int) int { // zero waste space strategy
 	if node == nil {
 		return index
 	}

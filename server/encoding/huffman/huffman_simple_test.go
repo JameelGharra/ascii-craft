@@ -99,6 +99,55 @@ func TestSimpleHuffmanEncodeStream(t *testing.T) {
 	}
 }
 
+func TestHuffmanEncodeBoundary(t *testing.T) {
+	freq := ascii.NewFrequency()
+	freq.Count(utils.New16BitIterator(
+		[]byte{
+			0, 'A',
+			0, 'A',
+			0, 'B',
+			0, 'A',
+			0, 'C',
+			0, 'D',
+			0, 'D',
+		}))
+	huffman, err := NewHuffman(freq)
+	if err != nil {
+		t.Fatalf("Failed to create huffman: %v", err)
+	}
+	// A(0), B(110), C(111), D(10)
+	input := []byte{
+		0, 'A', 0, 'A', 0, 'A', 0, 'A',
+		0, 'B', 0, 'B', 0, 'D',
+	}
+	dataToEncode := utils.New16BitIterator(input)
+	out := make([]byte, 20)
+	bitLength, err := huffman.Encode(dataToEncode, out) // should give 00001101 10100000 last 4 bits padding
+	if err != nil || bitLength != 12 {
+		t.Fatalf("Failed to encode data properly: %v", err)
+	}
+	expectedOut := []byte{
+		0b00001101,
+		0b10100000,
+	}
+	var tillIndex int
+	if bitLength%8 == 0 {
+		tillIndex = bitLength / 8
+	} else {
+		tillIndex = bitLength/8 + 1
+	}
+	if !bytes.Equal(out[:tillIndex], expectedOut) {
+		t.Fatalf("Expected encoded output to be %v, got %v", expectedOut, out[:tillIndex])
+	}
+	writer := utils.ByteWriter16{}
+	writerBuffer := make([]byte, 20)
+	writer.Set(writerBuffer)
+	huffman.Decode(out, bitLength, &writer)
+	if !bytes.Equal(writerBuffer[:writer.Len()], input) {
+		t.Fatalf("Expected decoded data to be %v, got %v", input, writerBuffer[:writer.Len()])
+	}
+}
+
 func TestSimpleHuffmanDecodeStream(t *testing.T) {
 	freq := constructSimpleFreqTable()
 	huffman, err := NewHuffman(freq)

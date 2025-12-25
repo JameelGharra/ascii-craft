@@ -22,9 +22,7 @@ func NewFrameEncoder(width, height uint32) *FrameEncoder {
 			ascii.NewAsciiFrame(width, height),
 			ascii.NewAsciiFrame(width, height),
 		},
-		rleExecutor: NewAsciiRLE(
-			width * height * 4, // planar + expansion buffer
-		),
+		rleExecutor:       NewAsciiRLE(),
 		diff:              ascii.NewAsciiFrame(width, height),
 		TotalOriginalData: 0,
 		DeflatedTotalData: 0,
@@ -38,18 +36,23 @@ func (fe *FrameEncoder) Encode(frame *ascii.AsciiFrame) ([]byte, error) {
 	// *curr = *frame
 	fe.diff.Xor(curr, prev)
 	fe.rleExecutor.Reset()
-	if err := fe.rleExecutor.RLE(fe.diff); err != nil {
+	if err := fe.rleExecutor.Write(fe.diff.Buffer); err != nil {
 		return nil, err
 	}
+	fe.rleExecutor.Finish()
 	fe.TotalOriginalData += len(fe.diff.Buffer)
 	fe.DeflatedTotalData += fe.rleExecutor.Size()
 	fe.frameCount++
 
+	result, err := fe.rleExecutor.Result()
+	if err != nil {
+		return nil, err
+	}
 	//
-	decoded := fe.Decode(fe.rleExecutor.Result(), prev)
+	decoded := fe.Decode(result, prev)
 	utils.Assert(bytes.Equal(decoded.Buffer, curr.Buffer), "RLE Decode mismatch detected")
 	//
-	return fe.rleExecutor.Result(), nil
+	return result, nil
 }
 func (fe *FrameEncoder) Result() *ascii.AsciiFrame {
 	return fe.buffers[fe.frameCount%2]

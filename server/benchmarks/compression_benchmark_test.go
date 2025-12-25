@@ -11,7 +11,10 @@ import (
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/encoding"
+	"github.com/JameelGharra/ascii-craft/server/encoding/huffman"
+
 	"github.com/JameelGharra/ascii-craft/server/ipc"
+	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
 const (
@@ -19,13 +22,15 @@ const (
 )
 
 type CompressionStat struct {
-	FrameIndex      int
-	OriginalBytes   int
-	CompressedBytes int
-	Ratio           float64 // percentage saved
+	FrameIndex          int
+	OriginalBytes       int
+	CompressedBytes     int
+	CompressedHuffBytes int
+	Ratio               float64
+	RatioHuff           float64
 }
 
-func TestRLECompressionWithRandomBot(t *testing.T) {
+func TestCompressionWithRandomBot(t *testing.T) {
 	absPath, err := filepath.Abs(BinaryPath)
 	if err != nil {
 		t.Fatalf("Path error: %v", err)
@@ -68,14 +73,14 @@ func TestRLECompressionWithRandomBot(t *testing.T) {
 	defer client.Close()
 
 	// right now I made it that it outputs to a csv file
-	outFileName := "compression_rle_stats.csv"
+	outFileName := "compression_stats.csv"
 	outFile, err := os.Create(outFileName)
 	if err != nil {
 		t.Fatalf("Failed to create statistics file: %v", err)
 	}
 	defer outFile.Close()
 
-	fmt.Fprintln(outFile, "Frame,Original_Bytes,Compressed_Bytes,Savings_Percent") // csv header
+	fmt.Fprintln(outFile, "Frame,Original_Bytes,Compressed_RLE_Bytes,Compressed_Huff_Bytes,Savings_Percent_RLE, Saving_Percent_Huff") // csv header
 	fmt.Printf("Writing frame statistics to %s...\n", outFileName)
 
 	fmt.Printf("Starting benchmark: %d Frames with random commands...\n", TotalFrames)
@@ -114,7 +119,8 @@ initLoop:
 
 	var stats []CompressionStat
 	var totalOriginal int64
-	var totalCompressed int64
+	var totalCompressedRLE int64
+	var totalCompressedHuff int64
 
 	startBench := time.Now()
 	lastFrameTime := time.Now()
@@ -149,6 +155,17 @@ initLoop:
 		lastFrameTime = time.Now()
 
 		frame.Planar(planarAsciiFrame)
+		freq := ascii.NewFrequency()
+		freq.Count(utils.New8BitIterator(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:])) // only color data
+		huffman, err := huffman.NewHuffman(freq)
+		if err != nil {
+			t.Fatalf("Failed to create huffman encoder at frame %d: %v", frameNum, err)
+		}
+		huffmanEncodedResult := make([]byte, len(planarAsciiFrame.Buffer)/2)
+		bitLength, err := huffman.Encode(utils.New8BitIterator(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:]), huffmanEncodedResult)
+		if err != nil {
+			t.Fatalf("Failed to huffman encode frame %d: %v", frameNum, err)
+		}
 		result, err := frameEncoder.Encode(planarAsciiFrame)
 
 		origSize := len(planarAsciiFrame.Buffer)
@@ -156,24 +173,33 @@ initLoop:
 
 		if err != nil {
 			t.Fatalf("Encoding Error at frame %d: %v", frameNum, err)
-		} else {
-			compSize = len(result)
 		}
+		compSize = len(result)
 
 		ratio := 100.0 * (1.0 - (float64(compSize) / float64(origSize))) // saved percentage
 
-		fmt.Fprintf(outFile, "%d,%d,%d,%.2f\n", frameNum, origSize, compSize, ratio)
+		var huffCompSize int
+		if bitLength%8 == 0 {
+			huffCompSize = bitLength / 8
+		} else {
+			huffCompSize = bitLength/8 + 1
+		}
+		ratioHuff := 100.0 * (1.0 - (float64(huffCompSize) / float64(origSize)))
+		fmt.Fprintf(outFile, "%d,%d,%d,%d,%.2f,%.2f\n", frameNum, origSize, compSize, huffCompSize, ratio, ratioHuff)
 
 		stat := CompressionStat{
-			FrameIndex:      frameNum,
-			OriginalBytes:   origSize,
-			CompressedBytes: compSize,
-			Ratio:           ratio,
+			FrameIndex:          frameNum,
+			OriginalBytes:       origSize,
+			CompressedBytes:     compSize,
+			CompressedHuffBytes: huffCompSize,
+			Ratio:               ratio,
+			RatioHuff:           ratioHuff,
 		}
 		stats = append(stats, stat)
 
 		totalOriginal += int64(origSize)
-		totalCompressed += int64(compSize)
+		totalCompressedRLE += int64(compSize)
+		totalCompressedHuff += int64(huffCompSize)
 
 		// if frameNum%1000 == 0 {
 		// 	fmt.Printf("Frame %d/%d | Current Compression: %.2f%%\n", frameNum, TotalFrames, ratio)
@@ -184,19 +210,27 @@ initLoop:
 
 	duration := time.Since(startBench)
 
-	var maxRatio, minRatio float64 = -100.0, 100.0
-	var avgRatio float64
+	var maxRatioRLE, minRatioRLE float64 = -100.0, 100.0
+	var avgRatioRLE, avgRatioHuff float64
+	var maxRatioHuff, minRatioHuff float64 = -100.0, 100.0
 
 	for _, s := range stats {
-		if s.Ratio > maxRatio {
-			maxRatio = s.Ratio
+		if s.Ratio > maxRatioRLE {
+			maxRatioRLE = s.Ratio
 		}
-		if s.Ratio < minRatio {
-			minRatio = s.Ratio
+		if s.Ratio < minRatioRLE {
+			minRatioRLE = s.Ratio
+		}
+		if s.RatioHuff > maxRatioHuff {
+			maxRatioHuff = s.RatioHuff
+		}
+		if s.RatioHuff < minRatioHuff {
+			minRatioHuff = s.RatioHuff
 		}
 	}
 
-	avgRatio = 100.0 * (1.0 - (float64(totalCompressed) / float64(totalOriginal)))
+	avgRatioRLE = 100.0 * (1.0 - (float64(totalCompressedRLE) / float64(totalOriginal)))
+	avgRatioHuff = 100.0 * (1.0 - (float64(totalCompressedHuff) / float64(totalOriginal)))
 
 	// killed the process to remove noisy output from the game
 	if cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
@@ -206,22 +240,36 @@ initLoop:
 	fmt.Print("\033[0m\033[2J\033[H\033[3J")
 
 	fmt.Println("\n==========================================")
-	fmt.Println("       RLE COMPRESSION BENCHMARK          ")
+	fmt.Println("       GENERAL BENCHMARK          			")
 	fmt.Println("==========================================")
 	fmt.Printf("Total Frames:   %d\n", TotalFrames)
 	fmt.Printf("Time Elapsed:   %v\n", duration)
 	fmt.Printf("Average FPS:    %.2f\n", float64(TotalFrames)/duration.Seconds())
 	fmt.Println("------------------------------------------")
+	fmt.Println("\n==========================================")
+	fmt.Println("       RLE COMPRESSION BENCHMARK          ")
+	fmt.Println("==========================================")
 	fmt.Printf("Total Data (Raw):  %.2f MB\n", float64(totalOriginal)/(1024*1024))
-	fmt.Printf("Total Data (RLE):  %.2f MB\n", float64(totalCompressed)/(1024*1024))
+	fmt.Printf("Total Data (RLE):  %.2f MB\n", float64(totalCompressedRLE)/(1024*1024))
 	fmt.Printf("Raw Data Written:  %s\n", outFileName)
 	fmt.Println("------------------------------------------")
-	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatio)
-	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatio)
-	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatio)
+	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatioRLE)
+	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatioRLE)
+	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatioRLE)
+	fmt.Println("\n==========================================")
+	fmt.Println("     HUFFMAN COMPRESSION BENCHMARK          ")
 	fmt.Println("==========================================")
-
-	if avgRatio < 0 {
+	fmt.Printf("Total Data (Huffman):  %.2f MB\n", float64(totalCompressedHuff)/(1024*1024))
+	fmt.Println("------------------------------------------")
+	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatioHuff)
+	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatioHuff)
+	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatioHuff)
+	fmt.Println("==========================================")
+	if avgRatioRLE < 0 {
 		t.Errorf("RLE is performing worse than raw data on average!")
 	}
+	if avgRatioHuff < 0 {
+		t.Errorf("Huffman is performing worse than raw data on average!")
+	}
+
 }

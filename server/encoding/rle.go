@@ -2,21 +2,34 @@ package encoding
 
 import (
 	"errors"
+)
 
-	"github.com/JameelGharra/ascii-craft/server/ascii"
+const (
+	initialRLEBufferSize = 256
+	expansionChunkSize   = 128
+)
+
+var (
+	ErrBufferTooSmall = errors.New("RLE buffer too small")
+	ErrEmptyInput     = errors.New("RLE input is empty")
+	ErrNotFinished    = errors.New("RLE encoding not finished")
 )
 
 type AsciiRLE struct {
-	buffer []byte
-	pos    int
-	err    bool
+	buffer     []byte
+	pos        int
+	currByte   byte
+	count      int
+	isFinished bool
 }
 
-func NewAsciiRLE(maxSize uint32) *AsciiRLE {
+func NewAsciiRLE() *AsciiRLE {
 	return &AsciiRLE{
-		buffer: make([]byte, maxSize),
-		pos:    0,
-		err:    false,
+		buffer:     make([]byte, 0, initialRLEBufferSize),
+		pos:        0,
+		currByte:   0,
+		count:      0,
+		isFinished: false,
 	}
 }
 
@@ -24,45 +37,55 @@ func (a *AsciiRLE) Size() int {
 	return a.pos
 }
 
-var (
-	ErrBufferTooSmall = errors.New("RLE buffer too small")
-	// ErrWorse          = errors.New("RLE made it worse, not better")
-)
+func (a *AsciiRLE) update() {
+	if a.count == 0 {
+		return
+	}
+	if a.pos+1 >= len(a.buffer) {
+		a.buffer = append(a.buffer, make([]byte, expansionChunkSize)...)
+	}
+	a.buffer[a.pos] = byte(a.count)
+	a.buffer[a.pos+1] = a.currByte
+	a.pos += 2
+}
 
-func (a *AsciiRLE) RLE(in *ascii.AsciiFrame) error {
-	length := len(in.Buffer)
-	buffMaxSize := len(a.buffer)
-	count := 1
-	for index := 0; index < length; {
-		count = 1
-		current := in.Buffer[index]
-		for index+count < length && in.Buffer[index+count] == current && count < 255 {
-			count++
+func (a *AsciiRLE) Write(data []byte) error {
+	if len(data) == 0 {
+		return ErrEmptyInput
+	}
+	if a.count == 0 {
+		a.currByte = data[0]
+	}
+	for _, curr := range data {
+		if curr == a.currByte && a.count < 255 {
+			a.count++
+			continue
 		}
-		index += count
-		// if a.pos+1 >= length {
-		// 	a.err = true
-		// 	return ErrWorse
-		// }
-		if a.pos+1 >= buffMaxSize {
-			a.err = true
-			return ErrBufferTooSmall
-		}
-		a.buffer[a.pos] = byte(count)
-		a.buffer[a.pos+1] = current
-		a.pos += 2
+		a.update()
+		a.currByte = curr
+		a.count = 1
 	}
 	return nil
 }
 
-func (a *AsciiRLE) Result() []byte {
-	if a.err {
-		return nil
+func (a *AsciiRLE) Finish() {
+	if a.isFinished {
+		return
 	}
-	return a.buffer[:a.pos]
+	a.update()
+	a.isFinished = true
+}
+
+func (a *AsciiRLE) Result() ([]byte, error) {
+	if a.isFinished {
+		return a.buffer[:a.pos], nil
+	}
+	return nil, ErrNotFinished
 }
 
 func (a *AsciiRLE) Reset() {
 	a.pos = 0
-	a.err = false
+	a.currByte = 0
+	a.count = 0
+	a.isFinished = false
 }

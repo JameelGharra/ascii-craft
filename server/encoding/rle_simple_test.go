@@ -24,14 +24,18 @@ func TestSimpleAsciiRLE(t *testing.T) {
 		3, 1,
 		2, 2,
 	}
-	rle := NewAsciiRLE(8)
+	rle := NewAsciiRLE()
 	frame := ascii.NewAsciiFrame(2, 2)
 	frame.Push(input)
-	err := rle.RLE(frame)
+	err := rle.Write(frame.Buffer)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	result := rle.Result()
+	rle.Finish()
+	result, err := rle.Result()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(result) != len(expected) {
 		t.Fatalf("Expected result length %d, got %d", len(expected), len(result))
 	}
@@ -45,13 +49,19 @@ func TestSimpleAsciiRLEWorse(t *testing.T) {
 	input := []byte{
 		1, 2, 3, 4, 5, 6,
 	}
-	rle := NewAsciiRLE(6)
+	rle := NewAsciiRLE()
 	frame := ascii.NewAsciiFrame(3, 1)
 	frame.Push(input)
-	rle.RLE(frame)
-	result := rle.Result()
+	if err := rle.Write(frame.Buffer); err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	rle.Finish()
+	result, err := rle.Result()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 
-	if result != nil {
+	if len(result) < len(frame.Buffer) {
 		t.Fatalf("Expected RLE to be worse, but got a better result")
 	}
 	// if err != ErrWorse {
@@ -82,7 +92,7 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 	}()
 
 	fmt.Println("Starting C process...")
-	// time.Sleep(2 * time.Second) // to wait for C to create the shared memory
+	time.Sleep(2 * time.Second) // to wait for C to create the shared memory
 	var client *ipc.Client
 	for range 10 { // retry for additional total 5 secs
 		time.Sleep(500 * time.Millisecond)
@@ -101,13 +111,13 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 	}
 	planaredFrame := ascii.NewAsciiFrame(frame.Width, frame.Height)
 	frame.Planar(planaredFrame)
-	rle := NewAsciiRLE(frame.Height * frame.Width * 4) // I doubled it just to make sure it prints the result even if worse
-	err = rle.RLE(planaredFrame)
-	if err != nil {
+	rle := NewAsciiRLE()
+	if err := rle.Write(planaredFrame.Buffer); err != nil {
 		t.Fatalf("Unexpected error during RLE: %v", err)
 	}
-	result := rle.Result()
-	if result == nil {
+	rle.Finish()
+	result, err := rle.Result()
+	if err != nil {
 		t.Fatal("RLE failed. Result is nil")
 
 	}

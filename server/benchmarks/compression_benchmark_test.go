@@ -115,7 +115,7 @@ initLoop:
 	}
 
 	frameEncoder := encoding.NewFrameEncoder(uint32(width), uint32(height))
-	planarAsciiFrame := ascii.NewAsciiFrame(uint32(width), uint32(height))
+	currentAsciiFrame := ascii.NewAsciiFrame(uint32(width), uint32(height))
 
 	var stats []CompressionStat
 	var totalOriginal int64
@@ -125,6 +125,11 @@ initLoop:
 	startBench := time.Now()
 	lastFrameTime := time.Now()
 
+	buffers := [2]*ascii.AsciiFrame{
+		ascii.NewAsciiFrame(uint32(width), uint32(height)),
+		ascii.NewAsciiFrame(uint32(width), uint32(height)),
+	}
+	diff := ascii.NewAsciiFrame(uint32(width), uint32(height))
 	for frameNum := 0; frameNum < TotalFrames; {
 
 		select {
@@ -154,21 +159,27 @@ initLoop:
 
 		lastFrameTime = time.Now()
 
-		frame.Planar(planarAsciiFrame)
+		frame.ToAsciiFrame(currentAsciiFrame)
 		freq := ascii.NewFrequency()
-		freq.Count(utils.New8BitIterator(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:])) // only color data
+		freq.Count(utils.New8BitIterator(currentAsciiFrame.Buffer)) // only color data
+		// to be properly refactored
+		curr := buffers[frameNum%2]
+		prev := buffers[(frameNum+1)%2]
+		curr.Push(currentAsciiFrame.Buffer)
+		diff.Xor(curr, prev)
+		//
 		huffman, err := huffman.NewHuffman(freq)
 		if err != nil {
 			t.Fatalf("Failed to create huffman encoder at frame %d: %v", frameNum, err)
 		}
-		huffmanEncodedResult := make([]byte, len(planarAsciiFrame.Buffer)/2)
-		bitLength, err := huffman.Encode(utils.New8BitIterator(planarAsciiFrame.Buffer[len(planarAsciiFrame.Buffer)/2:]), huffmanEncodedResult)
+		huffmanEncodedResult := make([]byte, len(currentAsciiFrame.Buffer))
+		bitLength, err := huffman.Encode(utils.New8BitIterator(currentAsciiFrame.Buffer), huffmanEncodedResult)
 		if err != nil {
 			t.Fatalf("Failed to huffman encode frame %d: %v", frameNum, err)
 		}
-		result, err := frameEncoder.Encode(planarAsciiFrame)
+		result, err := frameEncoder.Encode(currentAsciiFrame)
 
-		origSize := len(planarAsciiFrame.Buffer)
+		origSize := len(currentAsciiFrame.Buffer)
 		compSize := 0
 
 		if err != nil {

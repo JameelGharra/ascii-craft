@@ -18,12 +18,10 @@ type Frame struct {
 	Pixels []AsciiPixel
 }
 
-func (f *Frame) Planar(out *AsciiFrame) {
-	utils.Assert(len(out.Buffer) >= 2*len(f.Pixels), "Output buffer too small for planar conversion")
-	count := len(f.Pixels)
+func (f *Frame) ToAsciiFrame(out *AsciiFrame) {
+	utils.Assert(len(out.Buffer) >= len(f.Pixels), "Output buffer too small for conversion")
 	for index, pixel := range f.Pixels {
-		out.Buffer[index] = pixel.CharCode
-		out.Buffer[index+count] = rgb.RGBToColor8Bit(pixel.R, pixel.G, pixel.B)
+		out.Buffer[index] = rgb.RGBToColor8Bit(pixel.R, pixel.G, pixel.B)
 	}
 }
 
@@ -37,7 +35,7 @@ func NewAsciiFrame(width, height uint32) *AsciiFrame {
 	return &AsciiFrame{
 		Width:  width,
 		Height: height,
-		Buffer: make([]byte, width*height*2),
+		Buffer: make([]byte, width*height),
 	}
 }
 

@@ -51,7 +51,7 @@ func (it *SixteenBitIterator) HasNext() bool {
 
 func (it *SixteenBitIterator) Next() int {
 	Assert(it.HasNext(), "called Next() when no more data available")
-	it.current = (int(it.buffer[it.index]) << 8) | int(it.buffer[it.index+1])
+	it.current = Read16(it.buffer, it.index)
 	it.index += 2
 	return it.current
 }

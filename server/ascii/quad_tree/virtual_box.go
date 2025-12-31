@@ -69,12 +69,12 @@ func (vb *VirtualBox) withStride(stride int) *VirtualBox {
 	return vb
 }
 
-func (vb *VirtualBox) Next() (isDone bool, value int) {
+func (vb *VirtualBox) Next() int {
 	utils.Assert(vb.iterRow < vb.BoxRows, "box iterator already finished")
 	row := vb.RowStart + vb.iterRow
 	col := vb.ColStart + vb.iterCol
 	index := TranslateTo1D(row, col, vb.TotalCols)
-
+	var value int
 	utils.Assert(index >= 0 && index < len(vb.buffer), "exceeded indices while iterating over a virtual box", "idx", index, "row", row, "col", col)
 	if vb.Stride == 2 {
 		value = utils.Read16(vb.buffer, index)
@@ -86,8 +86,11 @@ func (vb *VirtualBox) Next() (isDone bool, value int) {
 		vb.iterCol = 0
 		vb.iterRow++
 	}
-	isDone = vb.iterRow == vb.BoxRows
-	return isDone, value
+	return value
+}
+
+func (vb *VirtualBox) HasNext() bool {
+	return vb.iterRow < vb.BoxRows
 }
 
 func (vb *VirtualBox) ResetIterator() {

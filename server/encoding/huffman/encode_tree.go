@@ -16,7 +16,10 @@ func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte
 	if freq.TotalDifferentChars == 1 {
 		res.Left()
 		res.Update(freq.Entries[0].Value)
-		return []byte{0, 0, 0, 0, 0, 0}, nil
+		return []byte{
+			0, 0, 0, 6, 0, 0,
+			0, 0, 0, 0, 0, 0,
+		}, nil
 	}
 	nodes := make(PriorityQueue, freq.TotalDifferentChars)
 	for i, point := range freq.Entries {

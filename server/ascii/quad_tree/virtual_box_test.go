@@ -62,14 +62,13 @@ func TestVirtualBoxIterators(t *testing.T) {
 	if len(boxes) != 4*depth {
 		t.Fatalf("Expected 4 boxes from partitioning 4x4 with depth %d, got %d", depth, len(boxes))
 	}
-	var isDone bool
 	var value int
 	for i, b := range boxes {
 		count := 0
 		expectedBox := expectedResult[i]
 		for expectedValue := range expectedBox {
-			isDone, value = b.Next()
-			if isDone && count < len(expectedBox)-1 {
+			value = b.Next()
+			if !b.HasNext() && count < len(expectedBox)-1 {
 				t.Fatalf("Box %d finished early at value index %d", i, expectedValue)
 			}
 			if value != expectedBox[expectedValue] {
@@ -78,7 +77,7 @@ func TestVirtualBoxIterators(t *testing.T) {
 			count++
 		}
 		count = 0
-		if !isDone {
+		if b.HasNext() {
 			t.Fatal("Expected box", i, "to be done after full iteration")
 		}
 	}
@@ -97,14 +96,13 @@ func TestVirtualBoxStride2(t *testing.T) {
 	if len(boxes) != 4*depth {
 		t.Fatalf("Expected 4 boxes from partitioning 4x4 with depth %d, got %d", depth, len(boxes))
 	}
-	var isDone bool
 	var value int
 	for i, b := range boxes {
 		count := 0
 		expectedBox := expectedResult[i]
 		for expectedValue := range expectedBox {
-			isDone, value = b.Next()
-			if isDone && count < len(expectedBox)-1 {
+			value = b.Next()
+			if !b.HasNext() && count < len(expectedBox)-1 {
 				t.Fatalf("Box %d finished early at value index %d", i, expectedValue)
 			}
 			if value != expectedBox[expectedValue] {
@@ -113,7 +111,7 @@ func TestVirtualBoxStride2(t *testing.T) {
 			count++
 		}
 		count = 0
-		if !isDone {
+		if b.HasNext() {
 			t.Fatal("Expected box", i, "to be done after full iteration")
 		}
 	}

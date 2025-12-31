@@ -161,19 +161,19 @@ initLoop:
 
 		frame.ToAsciiFrame(currentAsciiFrame)
 		freq := ascii.NewFrequency()
-		freq.Count(utils.New8BitIterator(currentAsciiFrame.Buffer)) // only color data
 		// to be properly refactored
 		curr := buffers[frameNum%2]
 		prev := buffers[(frameNum+1)%2]
 		curr.Push(currentAsciiFrame.Buffer)
 		diff.Xor(curr, prev)
 		//
+		freq.Count(utils.New8BitIterator(diff.Buffer)) // only color data
 		huffman, err := huffman.NewHuffman(freq)
 		if err != nil {
 			t.Fatalf("Failed to create huffman encoder at frame %d: %v", frameNum, err)
 		}
-		huffmanEncodedResult := make([]byte, len(currentAsciiFrame.Buffer))
-		bitLength, err := huffman.Encode(utils.New8BitIterator(currentAsciiFrame.Buffer), huffmanEncodedResult)
+		huffmanEncodedResult := make([]byte, len(diff.Buffer))
+		bitLength, err := huffman.Encode(utils.New8BitIterator(diff.Buffer), huffmanEncodedResult)
 		if err != nil {
 			t.Fatalf("Failed to huffman encode frame %d: %v", frameNum, err)
 		}
@@ -215,7 +215,6 @@ initLoop:
 		// if frameNum%1000 == 0 {
 		// 	fmt.Printf("Frame %d/%d | Current Compression: %.2f%%\n", frameNum, TotalFrames, ratio)
 		// }
-
 		frameNum++
 	}
 

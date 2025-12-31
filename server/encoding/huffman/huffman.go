@@ -24,9 +24,9 @@ type Huffman struct {
 }
 
 func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
-	if freqTable.TotalDifferentChars < MinimumAllowingHuffmanChars {
-		return nil, ErrNoNeedHuffmanEncoding
-	}
+	// if freqTable.TotalDifferentChars < MinimumAllowingHuffmanChars {
+	// 	return nil, ErrNoNeedHuffmanEncoding
+	// }
 	huffmanEncodeResultTable := NewHuffmanEncodeResultTable()
 	serializedTree, err := getEncodeTree(freqTable, huffmanEncodeResultTable)
 	if err != nil {

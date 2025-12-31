@@ -13,6 +13,11 @@ var ErrHuffmanTooLarge = errors.New("huffman tree is so large")
 const HuffmanEncodeLength = 6
 
 func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte, error) {
+	if freq.TotalDifferentChars == 1 {
+		res.Left()
+		res.Update(freq.Entries[0].Value)
+		return []byte{0, 0, 0, 0, 0, 0}, nil
+	}
 	nodes := make(PriorityQueue, freq.TotalDifferentChars)
 	for i, point := range freq.Entries {
 		nodes[i] = fromFreq(point)

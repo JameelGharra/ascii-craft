@@ -1,6 +1,8 @@
 package quad_tree
 
-import "github.com/JameelGharra/ascii-craft/server/utils"
+import (
+	"github.com/JameelGharra/ascii-craft/server/utils"
+)
 
 type VirtualBox struct {
 	buffer    []byte
@@ -68,7 +70,7 @@ func (vb *VirtualBox) withStride(stride int) *VirtualBox {
 }
 
 func (vb *VirtualBox) Next() (isDone bool, value int) {
-	utils.Assert(vb.iterRow == vb.BoxRows, "box iterator already finished")
+	utils.Assert(vb.iterRow < vb.BoxRows, "box iterator already finished")
 	row := vb.RowStart + vb.iterRow
 	col := vb.ColStart + vb.iterCol
 	index := TranslateTo1D(row, col, vb.TotalCols)
@@ -117,7 +119,7 @@ func (vb *VirtualBox) quad() (*VirtualBox, *VirtualBox, *VirtualBox, *VirtualBox
 
 	topRight := fromVirtualBox(vb).
 		setStart(vb.RowStart, centerNewColIndex).
-		withSize(vb.BoxRows, vb.BoxCols-newBoxEachCols)
+		withSize(newBoxEachRows, vb.BoxCols-newBoxEachCols)
 
 	bottomLeft := fromVirtualBox(vb).
 		setStart(centerNewRowIndex, vb.ColStart).
@@ -133,6 +135,7 @@ func (vb *VirtualBox) quad() (*VirtualBox, *VirtualBox, *VirtualBox, *VirtualBox
 func partition(data []byte, currentVb *VirtualBox, boxes *[]*VirtualBox, depth int) {
 	if depth == 0 {
 		*boxes = append(*boxes, currentVb)
+		return
 	}
 	tl, tr, bl, br := currentVb.quad()
 	partition(data, tl, boxes, depth-1)

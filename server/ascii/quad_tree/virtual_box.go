@@ -20,6 +20,21 @@ type VirtualBox struct {
 	iterCol int
 }
 
+type QuadTree []*VirtualBox
+
+type QuadTreeParam struct {
+	Depth  int
+	Rows   int
+	Cols   int
+	Stride int
+}
+
+func (q *QuadTree) UpdateBuffer(buffer []byte) {
+	for _, vb := range *q {
+		vb.buffer = buffer
+	}
+}
+
 func NewVirtualBox(buffer []byte, totalRows, totalCols int) *VirtualBox {
 	return &VirtualBox{
 		buffer:    buffer,
@@ -147,10 +162,11 @@ func partition(data []byte, currentVb *VirtualBox, boxes *[]*VirtualBox, depth i
 	partition(data, br, boxes, depth-1)
 }
 
-func Partition(data []byte, rows, cols, depth, stride int) []*VirtualBox {
+func Partition(data []byte, params QuadTreeParam) QuadTree {
 	boxes := &([]*VirtualBox{})
-	vb := NewVirtualBox(data, rows, cols).
-		withStride(stride)
-	partition(data, vb, boxes, depth)
+	vb := NewVirtualBox(data, params.Rows, params.Cols).
+		withStride(params.Stride)
+
+	partition(data, vb, boxes, params.Depth)
 	return *boxes
 }

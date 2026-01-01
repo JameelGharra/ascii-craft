@@ -12,8 +12,15 @@ func TestVirtualBoxConstructionNoAssert(t *testing.T) {
 	for i := range size {
 		data[i] = byte(i % 256)
 	}
-	_ = Partition(data, rows, cols, 2, 1)
-	_ = Partition(data, rows, cols, 2, 2)
+	params := QuadTreeParam{
+		Depth:  2,
+		Rows:   rows,
+		Cols:   cols,
+		Stride: 1,
+	}
+	_ = Partition(data, params)
+	params.Stride = 2
+	_ = Partition(data, params)
 }
 
 func returnDataSetWithResult() (data, result []byte) {
@@ -34,7 +41,13 @@ func returnDataSetWithResult() (data, result []byte) {
 
 func TestVirtualBoxConstructionOutput(t *testing.T) {
 	data, expectedOutOrder := returnDataSetWithResult()
-	boxes := Partition(data, 4, 4, 2, 1)
+	params := QuadTreeParam{
+		Depth:  2,
+		Rows:   4,
+		Cols:   4,
+		Stride: 1,
+	}
+	boxes := Partition(data, params)
 	if len(boxes) != 16 {
 		t.Fatalf("Expected 16 boxes from partitioning 4x4 with depth 2, got %d", len(boxes))
 	}
@@ -58,7 +71,13 @@ func TestVirtualBoxIterators(t *testing.T) {
 		{11, 12, 15, 16},
 	}
 	depth := 1
-	boxes := Partition(data, 4, 4, depth, 1)
+	params := QuadTreeParam{
+		Depth:  depth,
+		Rows:   4,
+		Cols:   4,
+		Stride: 1,
+	}
+	boxes := Partition(data, params)
 	if len(boxes) != 4*depth {
 		t.Fatalf("Expected 4 boxes from partitioning 4x4 with depth %d, got %d", depth, len(boxes))
 	}
@@ -92,7 +111,13 @@ func TestVirtualBoxStride2(t *testing.T) {
 		{0x0b0c, 0x0f10},
 	}
 	depth := 1
-	boxes := Partition(data, 4, 4, depth, 2)
+	params := QuadTreeParam{
+		Depth:  depth,
+		Rows:   4,
+		Cols:   4,
+		Stride: 2,
+	}
+	boxes := Partition(data, params)
 	if len(boxes) != 4*depth {
 		t.Fatalf("Expected 4 boxes from partitioning 4x4 with depth %d, got %d", depth, len(boxes))
 	}

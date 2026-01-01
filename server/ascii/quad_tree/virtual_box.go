@@ -82,7 +82,7 @@ func (vb *VirtualBox) Next() int {
 		value = int(vb.buffer[index])
 	}
 	vb.iterCol += vb.Stride
-	if vb.iterCol == vb.BoxCols {
+	if vb.iterCol >= vb.BoxCols {
 		vb.iterCol = 0
 		vb.iterRow++
 	}

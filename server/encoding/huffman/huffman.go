@@ -19,6 +19,7 @@ var (
 
 type Huffman struct {
 	serializedTree      []byte
+	TreeSize            int
 	HuffmanEncodeTable  *HuffmanEncodeResultTable
 	treeDecodeTraverser *HuffmanTreeDecodeTraverser
 }
@@ -34,6 +35,7 @@ func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
 	}
 	return (&Huffman{
 		serializedTree:      serializedTree,
+		TreeSize:            len(serializedTree),
 		HuffmanEncodeTable:  huffmanEncodeResultTable,
 		treeDecodeTraverser: NewHuffmanTreeDecodeTraverser(serializedTree),
 	}), nil

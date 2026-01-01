@@ -17,7 +17,7 @@ func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte
 		res.Left()
 		res.Update(freq.Entries[0].Value)
 		return []byte{
-			0, 0, 0, 6, 0, 0,
+			0, 0, 0, HuffmanEncodeLength, 0, 0,
 			0, 0, 0, 0, 0, 0,
 		}, nil
 	}

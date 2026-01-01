@@ -18,14 +18,15 @@ func TestSimpleAsciiRLE(t *testing.T) {
 	input := []byte{
 		5, 5, 5,
 		1, 1, 1,
-		2, 2}
+		2, 2,
+	}
 	expected := []byte{
 		3, 5,
 		3, 1,
 		2, 2,
 	}
 	rle := NewAsciiRLE()
-	frame := ascii.NewAsciiFrame(2, 2)
+	frame := ascii.NewAsciiFrame(4, 2)
 	frame.Push(input)
 	err := rle.Write(frame.Buffer)
 	if err != nil {
@@ -109,10 +110,10 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 	if !ok {
 		t.Fatalf("Failed to read frame from IPC")
 	}
-	planaredFrame := ascii.NewAsciiFrame(frame.Width, frame.Height)
-	frame.Planar(planaredFrame)
+	currentAsciiFrame := ascii.NewAsciiFrame(frame.Width, frame.Height)
+	frame.ToAsciiFrame(currentAsciiFrame)
 	rle := NewAsciiRLE()
-	if err := rle.Write(planaredFrame.Buffer); err != nil {
+	if err := rle.Write(currentAsciiFrame.Buffer); err != nil {
 		t.Fatalf("Unexpected error during RLE: %v", err)
 	}
 	rle.Finish()
@@ -121,8 +122,8 @@ func TestSimpleAsciiRealFrame(t *testing.T) {
 		t.Fatal("RLE failed. Result is nil")
 
 	}
-	if len(result) >= len(planaredFrame.Buffer) {
-		t.Fatalf("RLE did not improve size. Original: %d, RLE: %d", len(planaredFrame.Buffer), len(result))
+	if len(result) >= len(currentAsciiFrame.Buffer) {
+		t.Fatalf("RLE did not improve size. Original: %d, RLE: %d", len(currentAsciiFrame.Buffer), len(result))
 	}
-	fmt.Printf("Original size: %d, RLE size: %d\n", len(planaredFrame.Buffer), len(result))
+	fmt.Printf("Original size: %d, RLE size: %d\n", len(currentAsciiFrame.Buffer), len(result))
 }

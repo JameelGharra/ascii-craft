@@ -20,7 +20,17 @@ func constructSimpleFreqTable() *ascii.FreqTable {
 	return freq
 }
 
-func TestSimpleHuffman(t *testing.T) {
+// should give this encoding table: A(0) B(10) C(111) D(110)
+func constructSimpleHuffman(t *testing.T) *Huffman {
+	freq := constructSimpleFreqTable()
+	huffman, err := NewHuffman(freq)
+	if err != nil {
+		t.Fatalf("Failed to create huffman: %v", err)
+		return nil
+	}
+	return huffman
+}
+func TestSimpleHuffmanSerialization(t *testing.T) {
 
 	res := NewHuffmanEncodeResultTable()
 	freq := constructSimpleFreqTable()
@@ -69,11 +79,7 @@ func TestSimpleHuffman(t *testing.T) {
 }
 
 func TestSimpleHuffmanEncodeStream(t *testing.T) {
-	freq := constructSimpleFreqTable()
-	huffman, err := NewHuffman(freq)
-	if err != nil {
-		t.Fatalf("Failed to create huffman: %v", err)
-	}
+	huffman := constructSimpleHuffman(t)
 	dataToEncode := utils.New8BitIterator(
 		[]byte{
 			'A', 'B', 'C', 'D',
@@ -148,12 +154,34 @@ func TestHuffmanEncodeBoundary(t *testing.T) {
 	}
 }
 
-func TestSimpleHuffmanDecodeStream(t *testing.T) {
-	freq := constructSimpleFreqTable()
-	huffman, err := NewHuffman(freq)
-	if err != nil {
-		t.Fatalf("Failed to create huffman: %v", err)
+func TestHuffmanNotEnoughBuffer(t *testing.T) {
+	huffman := constructSimpleHuffman(t)
+	dataToEncode := utils.New8BitIterator(
+		[]byte{
+			'A', 'B', 'C', 'D',
+		})
+	out := make([]byte, 1)
+	_, err := huffman.Encode(dataToEncode, out)
+	if err != ErrHuffmanExceedsOutputBuffer {
+		t.Fatalf("Expected error to be ErrHuffmanExceedsOutputBuffer, got %v", err)
 	}
+}
+
+func TestHuffmanEncodeUnrecognizedChar(t *testing.T) {
+	huffman := constructSimpleHuffman(t)
+	dataToEncode := utils.New8BitIterator(
+		[]byte{
+			'A', 'B', 'E', // E is unrecognized
+		})
+	out := make([]byte, 10)
+	_, err := huffman.Encode(dataToEncode, out)
+	if err != ErrHuffmanValueNotFound {
+		t.Fatalf("Expected error to be ErrHuffmanValueNotFound, got %v", err)
+	}
+}
+
+func TestSimpleHuffmanDecodeStream(t *testing.T) {
+	huffman := constructSimpleHuffman(t)
 	encodedData := []byte{
 		0b01011111,
 		0,
@@ -162,7 +190,7 @@ func TestSimpleHuffmanDecodeStream(t *testing.T) {
 	writer := utils.ByteWriter8{}
 	writerBuffer := make([]byte, 10)
 	writer.Set(writerBuffer)
-	err = huffman.Decode(encodedData, bitLength, &writer)
+	err := huffman.Decode(encodedData, bitLength, &writer)
 	if err != nil {
 		t.Fatalf("Failed to decode data: %v", err)
 	}
@@ -171,5 +199,20 @@ func TestSimpleHuffmanDecodeStream(t *testing.T) {
 	}
 	if !bytes.Equal(writerBuffer[:writer.Len()], expectedDecoded) {
 		t.Fatalf("Expected decoded data to be %v, got %v", expectedDecoded, writerBuffer[:writer.Len()])
+	}
+}
+
+func TestHuffmanDecodeWeirdTraverse(t *testing.T) {
+	huffman := constructSimpleHuffman(t)
+	encodedData := []byte{
+		0b10001111, // that last 1 is the one that is making the intended problem
+	}
+	bitLength := 8
+	writer := utils.ByteWriter8{}
+	writerBuffer := make([]byte, 10)
+	writer.Set(writerBuffer)
+	err := huffman.Decode(encodedData, bitLength, &writer)
+	if err != ErrHuffmanDecodeTraverse {
+		t.Fatalf("Expected error to be ErrHuffmanDecodeTraverse, got %v", err)
 	}
 }

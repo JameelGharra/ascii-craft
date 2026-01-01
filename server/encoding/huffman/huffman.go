@@ -14,18 +14,20 @@ var (
 	ErrHuffmanExceedsOutputBuffer = errors.New("huffman encoding exceeds output buffer size")
 	ErrHuffmanDecodeTraverse      = errors.New("huffman decode traverser error")
 	ErrNoNeedHuffmanEncoding      = errors.New("no need for huffman encoding, data too small")
+	ErrHuffmanFailedToWrite       = errors.New("huffman failed to write to output")
 )
 
 type Huffman struct {
 	serializedTree      []byte
+	TreeSize            int
 	HuffmanEncodeTable  *HuffmanEncodeResultTable
 	treeDecodeTraverser *HuffmanTreeDecodeTraverser
 }
 
 func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
-	if freqTable.TotalDifferentChars < MinimumAllowingHuffmanChars {
-		return nil, ErrNoNeedHuffmanEncoding
-	}
+	// if freqTable.TotalDifferentChars < MinimumAllowingHuffmanChars {
+	// 	return nil, ErrNoNeedHuffmanEncoding
+	// }
 	huffmanEncodeResultTable := NewHuffmanEncodeResultTable()
 	serializedTree, err := getEncodeTree(freqTable, huffmanEncodeResultTable)
 	if err != nil {
@@ -33,6 +35,7 @@ func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
 	}
 	return (&Huffman{
 		serializedTree:      serializedTree,
+		TreeSize:            len(serializedTree),
 		HuffmanEncodeTable:  huffmanEncodeResultTable,
 		treeDecodeTraverser: NewHuffmanTreeDecodeTraverser(serializedTree),
 	}), nil
@@ -74,9 +77,11 @@ func (h *Huffman) Encode(dataToEncode utils.IByteIterator, out []byte) (int, err
 	return bitLength, nil
 }
 
+// would need this in client side, but decided to implement it anyway being hyped
 func (h *Huffman) Decode(dataToDecode []byte, encodingBitLen int, writer utils.ByteWriter) error {
 	currentBitIndex := 7
 	var bitDirection byte
+	stillOnIt := true
 	for _, encodedByte := range dataToDecode {
 		for currentBitIndex >= 0 && encodingBitLen > 0 {
 			bitDirection = (encodedByte >> currentBitIndex) & 1
@@ -84,16 +89,21 @@ func (h *Huffman) Decode(dataToDecode []byte, encodingBitLen int, writer utils.B
 			if err != nil {
 				return errors.Join(ErrHuffmanDecodeTraverse, err)
 			}
+			stillOnIt = true
 			if isLeaf {
 				err = writer.Write(value)
 				if err != nil {
-					return errors.Join(ErrHuffmanDecodeTraverse, err)
+					return errors.Join(ErrHuffmanFailedToWrite, err)
 				}
+				stillOnIt = false
 			}
 			currentBitIndex--
 			encodingBitLen--
 		}
 		currentBitIndex = 7
+	}
+	if stillOnIt {
+		return ErrHuffmanDecodeTraverse
 	}
 	return nil
 }

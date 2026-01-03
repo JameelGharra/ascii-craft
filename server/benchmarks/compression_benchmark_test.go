@@ -11,7 +11,7 @@ import (
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/ascii/quad_tree"
-	"github.com/JameelGharra/ascii-craft/server/encoding"
+	"github.com/JameelGharra/ascii-craft/server/encoder"
 	"github.com/JameelGharra/ascii-craft/server/encoding/huffman"
 
 	"github.com/JameelGharra/ascii-craft/server/ipc"
@@ -117,23 +117,33 @@ initLoop:
 		}
 	}
 
-	frameEncoder := encoding.NewFrameEncoder(uint32(width), uint32(height))
-	currentAsciiFrame := ascii.NewAsciiFrame(uint32(width), uint32(height))
+	frameEncoder := encoder.NewEncoder(width*height, quad_tree.QuadTreeParam{
+		Depth:  2,
+		Rows:   height,
+		Cols:   width,
+		Stride: 1,
+	})
+	frameEncoder.AddEncoding(encoder.XorRLE)
+	frameEncoder.AddEncoding(encoder.Huffman) // this one is huffman alone without xor btw
+	coloredFrame := make([]byte, width*height)
 
 	var stats []CompressionStat
 	var totalOriginal int64
-	var totalCompressedRLE int64
+	var totalCompressed int64
 	var totalCompressedHuff int64
 	var totalCompressedHuffBoxed int64
+
+	// for quad tree huffman approach
+	quadParam := quad_tree.QuadTreeParam{
+		Rows:   height,
+		Cols:   width,
+		Depth:  3,
+		Stride: 1,
+	}
 
 	startBench := time.Now()
 	lastFrameTime := time.Now()
 
-	buffers := [2]*ascii.AsciiFrame{
-		ascii.NewAsciiFrame(uint32(width), uint32(height)),
-		ascii.NewAsciiFrame(uint32(width), uint32(height)),
-	}
-	diff := ascii.NewAsciiFrame(uint32(width), uint32(height))
 	for frameNum := 0; frameNum < TotalFrames; {
 
 		select {
@@ -163,27 +173,21 @@ initLoop:
 
 		lastFrameTime = time.Now()
 
-		frame.ToAsciiFrame(currentAsciiFrame)
+		frame.ToColor8bit(coloredFrame)
 		freq := ascii.NewFrequency()
-		// to be properly refactored
-		curr := buffers[frameNum%2]
-		prev := buffers[(frameNum+1)%2]
-		curr.Push(currentAsciiFrame.Buffer)
-		diff.Xor(curr, prev)
-		//
-		freq.Count(utils.New8BitIterator(diff.Buffer)) // only color data
+		freq.Count(utils.New8BitIterator(coloredFrame))
 		normalHuffman, err := huffman.NewHuffman(freq)
 		if err != nil {
 			t.Fatalf("Failed to create huffman encoder at frame %d: %v", frameNum, err)
 		}
-		huffmanEncodedResult := make([]byte, len(diff.Buffer))
-		bitLength, err := normalHuffman.Encode(utils.New8BitIterator(diff.Buffer), huffmanEncodedResult)
+		huffmanEncodedResult := make([]byte, len(coloredFrame))
+		bitLength, err := normalHuffman.Encode(utils.New8BitIterator(coloredFrame), huffmanEncodedResult)
 		if err != nil {
 			t.Fatalf("Failed to huffman encode frame %d: %v", frameNum, err)
 		}
 
 		// quad stuff
-		boxes := quad_tree.Partition(diff.Buffer, int(height), int(width), 3, 1)
+		boxes := quad_tree.Partition(coloredFrame, quadParam)
 		totalHuffSerialSize, totalHuffBitsBoxes, totalHuffBoxEverything := 0, 0, 0
 		for _, box := range boxes {
 			boxFreq := ascii.NewFrequency()
@@ -209,16 +213,17 @@ initLoop:
 		}
 		totalHuffBoxEverything += totalHuffSerialSize + totalHuffBitsBoxesInBytes
 		//
-		result, err := frameEncoder.Encode(currentAsciiFrame)
+		var newFrame = make([]byte, len(coloredFrame))
+		copy(newFrame, coloredFrame)
+		result := frameEncoder.PushFrame(newFrame)
 
-		origSize := len(currentAsciiFrame.Buffer)
+		origSize := len(coloredFrame)
 		compSize := 0
-
-		if err != nil {
-			t.Fatalf("Encoding Error at frame %d: %v", frameNum, err)
+		if result != nil {
+			compSize = result.Len // for choose the best approach
+		} else {
+			compSize = len(coloredFrame)
 		}
-		compSize = len(result) // for rle
-
 		ratio := 100.0 * (1.0 - (float64(compSize) / float64(origSize))) // saved percentage
 
 		var huffCompSize int
@@ -245,29 +250,26 @@ initLoop:
 		stats = append(stats, stat)
 
 		totalOriginal += int64(origSize)
-		totalCompressedRLE += int64(compSize)
+		totalCompressed += int64(compSize)
 		totalCompressedHuff += int64(huffCompSize)
 		totalCompressedHuffBoxed += int64(totalHuffBoxEverything)
 
-		// if frameNum%1000 == 0 {
-		// 	fmt.Printf("Frame %d/%d | Current Compression: %.2f%%\n", frameNum, TotalFrames, ratio)
-		// }
 		frameNum++
 	}
 
 	duration := time.Since(startBench)
 
-	var avgRatioRLE, avgRatioHuff, avgRatioHuffBoxed float64
-	var maxRatioRLE, minRatioRLE float64 = -100.0, 100.0
+	var avgRatio, avgRatioHuff, avgRatioHuffBoxed float64
+	var maxRatio, minRatio float64 = -100.0, 100.0
 	var maxRatioHuff, minRatioHuff float64 = -100.0, 100.0
 	var maxRatioHuffBoxed, minRatioHuffBoxed float64 = -100.0, 100.0
 
 	for _, s := range stats {
-		if s.Ratio > maxRatioRLE {
-			maxRatioRLE = s.Ratio
+		if s.Ratio > maxRatio {
+			maxRatio = s.Ratio
 		}
-		if s.Ratio < minRatioRLE {
-			minRatioRLE = s.Ratio
+		if s.Ratio < minRatio {
+			minRatio = s.Ratio
 		}
 		if s.RatioHuff > maxRatioHuff {
 			maxRatioHuff = s.RatioHuff
@@ -283,7 +285,7 @@ initLoop:
 		}
 	}
 
-	avgRatioRLE = 100.0 * (1.0 - (float64(totalCompressedRLE) / float64(totalOriginal)))
+	avgRatio = 100.0 * (1.0 - (float64(totalCompressed) / float64(totalOriginal)))
 	avgRatioHuff = 100.0 * (1.0 - (float64(totalCompressedHuff) / float64(totalOriginal)))
 	avgRatioHuffBoxed = 100.0 * (1.0 - (float64(totalCompressedHuffBoxed) / float64(totalOriginal)))
 
@@ -302,15 +304,15 @@ initLoop:
 	fmt.Printf("Average FPS:    %.2f\n", float64(TotalFrames)/duration.Seconds())
 	fmt.Println("------------------------------------------")
 	fmt.Println("\n==========================================")
-	fmt.Println("       RLE COMPRESSION BENCHMARK          ")
-	fmt.Println("==========================================")
+	fmt.Println("       CHOOSE BEST COMPRESSION BENCHMARK    ")
+	fmt.Println("============================================")
 	fmt.Printf("Total Data (Raw):  %.2f MB\n", float64(totalOriginal)/(1024*1024))
-	fmt.Printf("Total Data (RLE):  %.2f MB\n", float64(totalCompressedRLE)/(1024*1024))
+	fmt.Printf("Total Data (RLE):  %.2f MB\n", float64(totalCompressed)/(1024*1024))
 	fmt.Printf("Raw Data Written:  %s\n", outFileName)
 	fmt.Println("------------------------------------------")
-	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatioRLE)
-	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatioRLE)
-	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatioRLE)
+	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatio)
+	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatio)
+	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatio)
 	fmt.Println("\n==========================================")
 	fmt.Println("     HUFFMAN COMPRESSION BENCHMARK          ")
 	fmt.Println("==========================================")
@@ -323,13 +325,14 @@ initLoop:
 	fmt.Println("\n==============================================")
 	fmt.Println("     QUAD-TREES + HUFFMAN COMPRESSION BENCHMARK")
 	fmt.Println("================================================")
+	fmt.Println("Depth of Quad Tree:", quadParam.Depth)
 	fmt.Printf("Total Data (Quad-Huffman):  %.2f MB\n", float64(totalCompressedHuffBoxed)/(1024*1024))
 	fmt.Println("------------------------------------------")
 	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatioHuffBoxed)
 	fmt.Printf("Worst Compression: %.2f%% (High noise/Trees)\n", minRatioHuffBoxed)
 	fmt.Printf("AVERAGE SAVINGS:   %.2f%%\n", avgRatioHuffBoxed)
 	fmt.Println("==========================================")
-	if avgRatioRLE < 0 {
+	if avgRatio < 0 {
 		t.Errorf("RLE is performing worse than raw data on average!")
 	}
 	if avgRatioHuff < 0 {

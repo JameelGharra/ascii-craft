@@ -1,7 +1,9 @@
 package encoder
 
 import (
+	"github.com/JameelGharra/ascii-craft/server/ascii"
 	"github.com/JameelGharra/ascii-craft/server/ascii/quad_tree"
+	"github.com/JameelGharra/ascii-craft/server/encoding"
 )
 
 type EncodingFrame struct {
@@ -11,8 +13,17 @@ type EncodingFrame struct {
 	CurrQT quad_tree.QuadTree
 	PrevQT quad_tree.QuadTree
 
-	Out []byte
-	Len int
+	RLE  encoding.AsciiRLE
+	Freq ascii.FreqTable
+
+	Temp    []byte // to avoid overwriting myself while RLEing
+	TempLen int
+
+	Out      []byte
+	Len      int
+	Stride   int
+	Encoding byte
+	Flags    byte
 }
 
 func NewEncodingFrame(size int, params quad_tree.QuadTreeParam) *EncodingFrame {
@@ -26,8 +37,15 @@ func NewEncodingFrame(size int, params quad_tree.QuadTreeParam) *EncodingFrame {
 		Curr:   nil,
 		CurrQT: currQt,
 
-		Out: out,
-		Len: 0,
+		RLE: *encoding.NewAsciiRLE(),
+
+		Out:    out,
+		Len:    0,
+		Stride: params.Stride,
+
+		Temp:    make([]byte, size),
+		TempLen: 0,
+		Freq:    *ascii.NewFrequency(),
 	}
 }
 
@@ -64,9 +82,9 @@ func (e *Encoder) AddEncoding(encoding EncodingCall) {
 	e.frames = append(e.frames, NewEncodingFrame(e.size, e.quadTreeParams))
 }
 
-func (e *Encoder) PushFrame(rawData []byte) (int, []byte) {
+func (e *Encoder) PushFrame(rawData []byte) *EncodingFrame {
 	minSizeTarget := len(rawData)
-	minBytes := rawData
+	var outFrame *EncodingFrame
 	for i, encoding := range e.encodings {
 		frame := e.frames[i]
 		frame.pushFrame(rawData)
@@ -76,8 +94,8 @@ func (e *Encoder) PushFrame(rawData []byte) (int, []byte) {
 		}
 		if frame.Len < minSizeTarget {
 			minSizeTarget = frame.Len
-			minBytes = frame.Out
+			outFrame = frame
 		}
 	}
-	return minSizeTarget, minBytes
+	return outFrame
 }

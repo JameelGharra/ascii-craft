@@ -2,16 +2,16 @@ package encoding
 
 import (
 	"errors"
+
+	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
 const (
-	initialRLEBufferSize = 256
-	expansionChunkSize   = 128
+	expansionChunkSize = 128
 )
 
 var (
 	ErrBufferTooSmall = errors.New("RLE buffer too small")
-	ErrEmptyInput     = errors.New("RLE input is empty")
 	ErrNotFinished    = errors.New("RLE encoding not finished")
 )
 
@@ -25,7 +25,7 @@ type AsciiRLE struct {
 
 func NewAsciiRLE() *AsciiRLE {
 	return &AsciiRLE{
-		buffer:     make([]byte, 0, initialRLEBufferSize),
+		buffer:     nil,
 		pos:        0,
 		currByte:   0,
 		count:      0,
@@ -49,10 +49,9 @@ func (a *AsciiRLE) update() {
 	a.pos += 2
 }
 
-func (a *AsciiRLE) Write(data []byte) error {
-	if len(data) == 0 {
-		return ErrEmptyInput
-	}
+func (a *AsciiRLE) Write(data []byte) {
+	utils.Assert(a.buffer != nil, "AsciiRLE has to have a buffer to write into first")
+	utils.Assert(len(data) > 0, "data has to be non empty when RLE writing")
 	if a.count == 0 {
 		a.currByte = data[0]
 	}
@@ -65,7 +64,6 @@ func (a *AsciiRLE) Write(data []byte) error {
 		a.currByte = curr
 		a.count = 1
 	}
-	return nil
 }
 
 func (a *AsciiRLE) Finish() {
@@ -83,7 +81,8 @@ func (a *AsciiRLE) Result() ([]byte, error) {
 	return nil, ErrNotFinished
 }
 
-func (a *AsciiRLE) Reset() {
+func (a *AsciiRLE) Reset(buffer []byte) {
+	a.buffer = buffer
 	a.pos = 0
 	a.currByte = 0
 	a.count = 0

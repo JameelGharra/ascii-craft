@@ -9,10 +9,14 @@ import (
 )
 
 var ErrHuffmanTooLarge = errors.New("huffman tree is so large")
+var ErrHuffmanEmptyFrame = errors.New("huffman encoding on empty frame")
 
 const HuffmanEncodeLength = 6
 
 func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte, error) {
+	if freq.TotalDifferentChars == 0 {
+		return nil, ErrHuffmanEmptyFrame
+	}
 	if freq.TotalDifferentChars == 1 {
 		res.Left()
 		res.Update(freq.Entries[0].Value)

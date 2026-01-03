@@ -1,8 +1,8 @@
 package encoder
 
 const (
-	XOR_RLE = iota
+	NONE = iota
+	XOR_RLE
 	HUFFMAN
-	HUFFMAN_QUADTREE
-	XOR_RLE_QUADTREE
+	XOR_HUFFMAN
 )

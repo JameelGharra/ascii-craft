@@ -15,6 +15,7 @@ type EncodingFrame struct {
 
 	RLE  encoding.AsciiRLE
 	Freq ascii.FreqTable
+	// to be added huff ref?
 
 	Temp    []byte // to avoid overwriting myself while RLEing
 	TempLen int

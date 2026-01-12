@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	TotalFrames = 10000
+	TotalFrames = 1000000
 )
 
 type CompressionStat struct {
@@ -41,7 +41,7 @@ func TestCompressionWithRandomBot(t *testing.T) {
 
 	cmd := exec.Command(absPath)
 	cmd.Dir = filepath.Dir(absPath)
-	cmd.Stdout = os.Stdout
+	// cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
@@ -83,7 +83,7 @@ func TestCompressionWithRandomBot(t *testing.T) {
 	}
 	defer outFile.Close()
 
-	fmt.Fprintln(outFile, "Frame,Original_Bytes,Compressed_RLE_Bytes,Compressed_Huff_Bytes,Compressed_Huff_Boxed,Savings_Percent_RLE,Saving_Percent_Huff,Saving_Percent_Huff_Boxed") // csv header
+	fmt.Fprintln(outFile, "Frame,Original_Bytes,Compressed_Hybrid_Bytes,Compressed_Huff_Bytes,Compressed_Huff_Boxed,Savings_Percent_RLE,Saving_Percent_Huff,Saving_Percent_Huff_Boxed") // csv header
 	fmt.Printf("Writing frame statistics to %s...\n", outFileName)
 
 	fmt.Printf("Starting benchmark: %d Frames with random commands...\n", TotalFrames)
@@ -124,7 +124,8 @@ initLoop:
 		Stride: 1,
 	})
 	frameEncoder.AddEncoding(encoder.XorRLE)
-	frameEncoder.AddEncoding(encoder.Huffman) // this one is huffman alone without xor btw
+	frameEncoder.AddEncoding(encoder.Huffman)
+
 	coloredFrame := make([]byte, width*height)
 
 	var stats []CompressionStat
@@ -306,8 +307,8 @@ initLoop:
 	fmt.Println("\n==========================================")
 	fmt.Println("       CHOOSE BEST COMPRESSION BENCHMARK    ")
 	fmt.Println("============================================")
-	fmt.Printf("Total Data (Raw):  %.2f MB\n", float64(totalOriginal)/(1024*1024))
-	fmt.Printf("Total Data (RLE):  %.2f MB\n", float64(totalCompressed)/(1024*1024))
+	fmt.Printf("Total Data:  	   %.2f MB\n", float64(totalOriginal)/(1024*1024))
+	fmt.Printf("Total Data (comp): %.2f MB\n", float64(totalCompressed)/(1024*1024))
 	fmt.Printf("Raw Data Written:  %s\n", outFileName)
 	fmt.Println("------------------------------------------")
 	fmt.Printf("Best Compression:  %.2f%% (Less detail/Sky)\n", maxRatio)

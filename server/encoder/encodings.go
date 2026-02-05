@@ -55,7 +55,24 @@ func Huffman(frame *EncodingFrame) error {
 	} else {
 		byteLen = bitLen / 8
 	}
-	finalSize := byteLen + huff.TreeSize
+	// for canonical tree
+	frame.RLE.Reset(frame.Temp)
+	var table [256]byte
+	for val, length := range huff.ValToCodeLength {
+		table[val] = byte(length)
+	}
+	frame.RLE.Write(table[:])
+	frame.RLE.Finish()
+	// fmt.Printf("Huffman tree size: %d bytes\n", frame.RLE.Size())
+	// fmt.Printf("Huffman encoded data size: %d bytes\n", byteLen)
+	// result, _ := frame.RLE.Result()
+	// fmt.Printf("RLE result: %v\n", result)
+	//
+	var tableSize = frame.RLE.Size()
+	if tableSize > 256 {
+		tableSize = 256
+	}
+	finalSize := byteLen + tableSize
 	if finalSize > len(frame.Curr) {
 		frame.Len = len(frame.Curr) + 1
 		return nil

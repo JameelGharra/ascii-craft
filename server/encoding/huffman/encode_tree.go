@@ -5,25 +5,26 @@ import (
 	"errors"
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
-	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
-var ErrHuffmanTooLarge = errors.New("huffman tree is so large")
 var ErrHuffmanEmptyFrame = errors.New("huffman encoding on empty frame")
 
-const HuffmanEncodeLength = 6
+// const HuffmanEncodeLength = 6
 
-func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte, error) {
+func buildEncodeTree(freq *ascii.FreqTable) (*HuffmanNode, error) {
 	if freq.TotalDifferentChars == 0 {
 		return nil, ErrHuffmanEmptyFrame
 	}
-	if freq.TotalDifferentChars == 1 {
-		res.Left()
-		res.Update(freq.Entries[0].Value)
-		return []byte{
-			0, 0, 0, HuffmanEncodeLength, 0, 0,
-			0, 0, 0, 0, 0, 0,
-		}, nil
+	if freq.TotalDifferentChars == 1 { // manually building for 1 entry (black screen)
+		head := &HuffmanNode{
+			value: 0,
+			count: freq.Entries[0].Count,
+		}
+		head.left = &HuffmanNode{
+			value: freq.Entries[0].Value,
+			count: freq.Entries[0].Count,
+		}
+		return head, nil
 	}
 	nodes := make(PriorityQueue, freq.TotalDifferentChars)
 	for i, point := range freq.Entries {
@@ -40,46 +41,43 @@ func getEncodeTree(freq *ascii.FreqTable, res *HuffmanEncodeResultTable) ([]byte
 		count += 2
 	}
 	head := heap.Pop(&nodes).(*HuffmanNode)
-	data := make([]byte, count*HuffmanEncodeLength)
-	serializeTree(head, &data, res, 0)
-
-	return data, nil
+	return head, nil
 }
 
-func serializeTree(node *HuffmanNode, data *[]byte, res *HuffmanEncodeResultTable, index int) int { // zero waste space strategy
-	if node == nil {
-		return index
-	}
+// func serializeTree(node *HuffmanNode, data *[]byte, res *HuffmanEncodeResultTable, index int) int { // zero waste space strategy
+// 	if node == nil {
+// 		return index
+// 	}
 
-	utils.Assert(index+5 < len(*data), "Index will exceed data length.")
+// 	utils.Assert(index+5 < len(*data), "Index will exceed data length.")
 
-	if node.left == nil && node.right == nil {
-		res.Update(node.value)
-	}
+// 	if node.left == nil && node.right == nil {
+// 		res.Update(node.value)
+// 	}
 
-	leftIndex := index + HuffmanEncodeLength
+// 	leftIndex := index + HuffmanEncodeLength
 
-	utils.Write16(*data, index, node.value)
+// 	utils.Write16(*data, index, node.value)
 
-	leftFieldStart := index + sizePerNodeField
-	rightFieldStart := leftFieldStart + sizePerNodeField
-	utils.Write16(*data, leftFieldStart, 0)
-	utils.Write16(*data, rightFieldStart, 0)
+// 	leftFieldStart := index + sizePerNodeField
+// 	rightFieldStart := leftFieldStart + sizePerNodeField
+// 	utils.Write16(*data, leftFieldStart, 0)
+// 	utils.Write16(*data, rightFieldStart, 0)
 
-	next := leftIndex
+// 	next := leftIndex
 
-	if node.left != nil {
-		utils.Write16(*data, leftFieldStart, leftIndex)
-		res.Left()
-		next = serializeTree(node.left, data, res, leftIndex)
-		res.Back()
-	}
+// 	if node.left != nil {
+// 		utils.Write16(*data, leftFieldStart, leftIndex)
+// 		res.Left()
+// 		next = serializeTree(node.left, data, res, leftIndex)
+// 		res.Back()
+// 	}
 
-	if node.right != nil {
-		utils.Write16(*data, rightFieldStart, next)
-		res.Right()
-		next = serializeTree(node.right, data, res, next)
-		res.Back()
-	}
-	return next
-}
+// 	if node.right != nil {
+// 		utils.Write16(*data, rightFieldStart, next)
+// 		res.Right()
+// 		next = serializeTree(node.right, data, res, next)
+// 		res.Back()
+// 	}
+// 	return next
+// }

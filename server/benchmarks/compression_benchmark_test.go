@@ -204,7 +204,8 @@ initLoop:
 				t.Fatalf("Failed to huffman encode box at frame %d: %v", frameNum, err)
 			}
 			totalHuffBitsBoxes += boxBitLength
-			totalHuffSerialSize += boxHuffman.TreeSize
+			// totalHuffSerialSize += boxHuffman.TreeSize
+			totalHuffSerialSize += 6 * (len(boxHuffman.ValToCodeLength)*2 - 1)
 		}
 		totalHuffBitsBoxesInBytes := 0
 		if totalHuffBitsBoxes%8 != 0 {
@@ -213,7 +214,7 @@ initLoop:
 			totalHuffBitsBoxesInBytes = totalHuffBitsBoxes / 8
 		}
 		totalHuffBoxEverything += totalHuffSerialSize + totalHuffBitsBoxesInBytes
-		//
+
 		var newFrame = make([]byte, len(coloredFrame))
 		copy(newFrame, coloredFrame)
 		result := frameEncoder.PushFrame(newFrame)
@@ -233,7 +234,9 @@ initLoop:
 		} else {
 			huffCompSize = bitLength/8 + 1
 		}
-		huffCompSize += normalHuffman.TreeSize
+		// huffCompSize += normalHuffman.TreeSize
+		huffCompSize += 6 * (len(normalHuffman.ValToCodeLength)*2 - 1)
+		// fmt.Printf("Huffman Tree size for standard: %d\n", 6*(len(normalHuffman.ValToCodeLength)*2-1))
 		ratioHuff := 100.0 * (1.0 - (float64(huffCompSize) / float64(origSize)))
 		ratioHuffBoxed := 100.0 * (1.0 - (float64(totalHuffBoxEverything) / float64(origSize)))
 		fmt.Fprintf(outFile, "%d,%d,%d,%d,%d,%.2f,%.2f, %.2f\n", frameNum, origSize, compSize, huffCompSize, totalHuffBoxEverything, ratio, ratioHuff, ratioHuffBoxed)

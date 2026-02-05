@@ -15,29 +15,31 @@ var (
 	ErrHuffmanDecodeTraverse      = errors.New("huffman decode traverser error")
 	ErrNoNeedHuffmanEncoding      = errors.New("no need for huffman encoding, data too small")
 	ErrHuffmanFailedToWrite       = errors.New("huffman failed to write to output")
+	ErrHuffmanPackingDoesntFit    = errors.New("huffman packing doesn't fit in output buffer")
 )
 
 type Huffman struct {
-	serializedTree      []byte
-	TreeSize            int
-	HuffmanEncodeTable  *HuffmanEncodeResultTable
+	encodeTable         map[int][]byte
 	treeDecodeTraverser *HuffmanTreeDecodeTraverser
+	ValToCodeLength     map[int]int
 }
 
 func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
 	// if freqTable.TotalDifferentChars < MinimumAllowingHuffmanChars {
 	// 	return nil, ErrNoNeedHuffmanEncoding
 	// }
-	huffmanEncodeResultTable := NewHuffmanEncodeResultTable()
-	serializedTree, err := getEncodeTree(freqTable, huffmanEncodeResultTable)
+	huffmanTreeRoot, err := buildEncodeTree(freqTable)
 	if err != nil {
 		return nil, err
 	}
+	valToCodeLength := make(map[int]int)
+	huffmanTreeRoot.calculateDepths(0, valToCodeLength)
+	valToCode := generateCanonicalCodes(valToCodeLength)
+	decodeTreeRoot := buildCanonicalDecodeTree(valToCode)
 	return (&Huffman{
-		serializedTree:      serializedTree,
-		TreeSize:            len(serializedTree),
-		HuffmanEncodeTable:  huffmanEncodeResultTable,
-		treeDecodeTraverser: NewHuffmanTreeDecodeTraverser(serializedTree),
+		encodeTable:         valToCode,
+		treeDecodeTraverser: NewHuffmanTreeDecodeTraverser(decodeTreeRoot),
+		ValToCodeLength:     valToCodeLength,
 	}), nil
 }
 
@@ -47,7 +49,7 @@ func (h *Huffman) Encode(dataToEncode utils.IByteIterator, out []byte) (int, err
 	outIndex, dirty, bitLength := 0, false, 0
 	for dataToEncode.HasNext() {
 		value := dataToEncode.Next()
-		huffmanCode, exists := h.HuffmanEncodeTable.ValToCode[value]
+		huffmanCode, exists := h.encodeTable[value]
 		if !exists {
 			return 0, ErrHuffmanValueNotFound
 		}
@@ -106,4 +108,9 @@ func (h *Huffman) Decode(dataToDecode []byte, encodingBitLen int, writer utils.B
 		return ErrHuffmanDecodeTraverse
 	}
 	return nil
+}
+
+// encodes the huffman tree and bit length into the output buffer at the given offset
+func IntoBytes(h *Huffman, bitLen int, out []byte, offset int) {
+
 }

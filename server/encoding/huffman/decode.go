@@ -2,8 +2,6 @@ package huffman
 
 import (
 	"errors"
-
-	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
 const (
@@ -16,63 +14,40 @@ var (
 	ErrHuffmanDecodeExceedsTreeBounds   = errors.New("huffman decode traverser exceeded tree bounds")
 )
 
+type HuffmanDecodeNode struct {
+	left  *HuffmanDecodeNode
+	right *HuffmanDecodeNode
+	value int // would be -1 if not leaf
+}
+
 type HuffmanTreeDecodeTraverser struct {
-	currentTreeIndex int // 16 bit for indexing
-	serializedTree   []byte
+	decodeTreeRoot *HuffmanDecodeNode
+	currentNode    *HuffmanDecodeNode
 }
 
-func NewHuffmanTreeDecodeTraverser(serializedTree []byte) *HuffmanTreeDecodeTraverser {
+func NewHuffmanTreeDecodeTraverser(root *HuffmanDecodeNode) *HuffmanTreeDecodeTraverser {
 	return &HuffmanTreeDecodeTraverser{
-		currentTreeIndex: 0,
-		serializedTree:   serializedTree,
+		decodeTreeRoot: root,
+		currentNode:    root,
 	}
 }
 
-// left and right will return the next huff node start index
-func (h *HuffmanTreeDecodeTraverser) goLeft() (int, error) {
-	leftFieldStart := h.currentTreeIndex + sizePerNodeField
-	if leftFieldStart >= len(h.serializedTree) {
-		return 0, ErrHuffmanDecodeExceedsTreeBounds
-	}
-	return utils.Read16(h.serializedTree, leftFieldStart), nil
-}
-
-func (h *HuffmanTreeDecodeTraverser) isLeaf() (bool, error) {
-	leftFieldStart := h.currentTreeIndex + sizePerNodeField
-	rightFieldStart := h.currentTreeIndex + 2*sizePerNodeField
-	if leftFieldStart >= len(h.serializedTree) || rightFieldStart >= len(h.serializedTree) {
-		return false, ErrHuffmanDecodeExceedsTreeBounds
-	}
-	return (utils.Read16(h.serializedTree, leftFieldStart) == 0 &&
-		utils.Read16(h.serializedTree, rightFieldStart) == 0), nil
-}
-func (h *HuffmanTreeDecodeTraverser) goRight() (int, error) {
-	rightFieldStart := h.currentTreeIndex + 2*sizePerNodeField
-	if rightFieldStart >= len(h.serializedTree) {
-		return 0, ErrHuffmanDecodeExceedsTreeBounds
-	}
-	return utils.Read16(h.serializedTree, rightFieldStart), nil
-}
 func (h *HuffmanTreeDecodeTraverser) TraverseStep(bitDirection byte) (isLeaf bool, value int, err error) {
 	switch bitDirection {
 	case bitIndicatorLeft:
-		h.currentTreeIndex, err = h.goLeft()
+		h.currentNode = h.currentNode.left
 	case bitIndicatorRight:
-		h.currentTreeIndex, err = h.goRight()
+		h.currentNode = h.currentNode.right
 	default:
 		return false, 0, ErrHuffmanDecodeInvalidBitDirection
 	}
-
-	if err != nil {
-		return false, 0, err
+	if h.currentNode == nil {
+		return false, 0, ErrHuffmanDecodeExceedsTreeBounds
 	}
-	isLeaf, err = h.isLeaf()
-	if err != nil {
-		return false, 0, err
-	}
-	value = utils.Read16(h.serializedTree, h.currentTreeIndex)
+	isLeaf = h.currentNode.left == nil && h.currentNode.right == nil
 	if isLeaf {
-		h.currentTreeIndex = 0 // for next run
+		value = h.currentNode.value
+		h.currentNode = h.decodeTreeRoot
 	}
 	return isLeaf, value, nil
 }

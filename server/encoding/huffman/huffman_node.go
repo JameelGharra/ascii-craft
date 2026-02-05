@@ -24,16 +24,6 @@ func (h *HuffmanNode) String() string {
 	return fmt.Sprintf("HuffmanNode(value=%d, count=%d)", h.value, h.count)
 }
 
-// func (h *HuffmanNode) debug(indent int) string {
-// 	indentStr := strings.Repeat(" ", indent*2)
-// 	if h == nil {
-// 		return fmt.Sprintf("%s-> nil\n", indentStr)
-// 	}
-// 	return fmt.Sprintf("%s->%s\n", indentStr, h.String()) +
-// 		h.left.debug(indent+1) +
-// 		h.right.debug(indent+1)
-// }
-
 func join(a, b *HuffmanNode) *HuffmanNode {
 	return &HuffmanNode{
 		value: 0,
@@ -49,5 +39,19 @@ func fromFreq(freq *ascii.FreqEntry) *HuffmanNode {
 		count: freq.Count,
 		left:  nil,
 		right: nil,
+	}
+}
+
+func (h *HuffmanNode) calculateDepths(currentDepth int, lengths map[int]int) {
+	if h.left == nil && h.right == nil {
+		lengths[h.value] = currentDepth
+		return
+	}
+	// technically added the null checks just for the edge case of single node
+	if h.left != nil {
+		h.left.calculateDepths(currentDepth+1, lengths)
+	}
+	if h.right != nil {
+		h.right.calculateDepths(currentDepth+1, lengths)
 	}
 }

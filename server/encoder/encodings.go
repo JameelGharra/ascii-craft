@@ -63,15 +63,22 @@ func Huffman(frame *EncodingFrame) error {
 	}
 	frame.RLE.Write(table[:])
 	frame.RLE.Finish()
+
+	var tableSize = frame.RLE.Size()
+	var sparseSize = frame.Freq.TotalDifferentChars * 2
+	if sparseSize < tableSize {
+		tableSize = sparseSize
+	}
+	if tableSize > 256 {
+		tableSize = 256
+	}
 	// fmt.Printf("Huffman tree size: %d bytes\n", frame.RLE.Size())
 	// fmt.Printf("Huffman encoded data size: %d bytes\n", byteLen)
 	// result, _ := frame.RLE.Result()
 	// fmt.Printf("RLE result: %v\n", result)
+	// fmt.Printf("Frequency count for frame: %v\n", frame.Freq.TotalDifferentChars)
+	// fmt.Printf("Picked size for table: %d bytes\n", tableSize)
 	//
-	var tableSize = frame.RLE.Size()
-	if tableSize > 256 {
-		tableSize = 256
-	}
 	finalSize := byteLen + tableSize
 	if finalSize > len(frame.Curr) {
 		frame.Len = len(frame.Curr) + 1

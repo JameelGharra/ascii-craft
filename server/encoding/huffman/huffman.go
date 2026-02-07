@@ -112,5 +112,9 @@ func (h *Huffman) Decode(dataToDecode []byte, encodingBitLen int, writer utils.B
 
 // encodes the huffman tree and bit length into the output buffer at the given offset
 func IntoBytes(h *Huffman, bitLen int, out []byte, offset int) {
+	// it has to return the meta mode
+	// it has to return the size of data (including metadata) to or return the slice itself
+	// it has to return an error of some sort.
+	// 2^16 is enough to a bitLen although technically we do not need it since it is at the end
 
 }

@@ -5,6 +5,25 @@ import (
 	"testing"
 )
 
+func TestPacketOverflow(t *testing.T) {
+	buf := make([]byte, 1) // tiny buff
+	pb := NewPacketBuilder(buf)
+
+	// supposed to demand 2 bytes
+	if err := pb.WriteVarint(300); err == nil {
+		t.Errorf("Expected ErrPacketTooSmall, got %v", err)
+	}
+
+	if err := pb.WriteVarint(10); err != nil {
+		t.Errorf("Should be able to write 1 byte varint, got %v", err)
+	}
+
+	// demanding a next write should overflow
+	if err := pb.WriteByte(0xFF); err != ErrPacketTooSmall {
+		t.Errorf("Expected error on full buffer write, got %v", err)
+	}
+}
+
 func TestWriteVarint(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -86,25 +86,31 @@ var (
 	ErrEmptyCanonicalTable                      = errors.New("empty canonical table provided")
 	tableRLEBuffer           []byte             = make([]byte, canonicalTableRawSize)
 	tableSparseBuffer        []byte             = make([]byte, canonicalTableRawSize) // wont bother using if input not half of raw so its ok
+	tableRawBuffer           []byte             = make([]byte, canonicalTableRawSize)
 	RLEEncoder               *encoding.AsciiRLE = encoding.NewAsciiRLE()
 )
 
 // it picks the best strategy out of the meta modes and pack accordingly
-// would return the meta mode and the packed table
+// would return the meta mode, amoutnt of bytes written and an error if any
 // current strategies are raw, rle and spare (pairs of value and length)
 func packCanonicalTable(codeLengths map[int]int) (byte, []byte, error) {
 	if len(codeLengths) == 0 {
 		return 0, nil, ErrEmptyCanonicalTable
 	}
+	if len(codeLengths) > canonicalTableRawSize {
+		return 0, nil, ErrInvalidCanonicalTable
+	}
+	for i := 0; i < canonicalTableRawSize; i++ {
+		tableRawBuffer[i] = 0
+	}
 	RLEEncoder.Reset(tableRLEBuffer)
-	var rawTable [canonicalTableRawSize]byte
 	for val, length := range codeLengths {
 		if val < 0 || val >= canonicalTableRawSize {
 			return 0, nil, ErrInvalidCanonicalTable
 		}
-		rawTable[val] = byte(length)
+		tableRawBuffer[val] = byte(length)
 	}
-	RLEEncoder.Write(rawTable[:])
+	RLEEncoder.Write(tableRawBuffer)
 	RLEEncoder.Finish()
 	rleSize := RLEEncoder.Size()
 	sparseSize := canonicalTableRawSize
@@ -113,10 +119,10 @@ func packCanonicalTable(codeLengths map[int]int) (byte, []byte, error) {
 		// I know that iterating over the map is faster, but keeping
 		// a deterministic order sounds a better idea for tests
 		for i := 0; i < canonicalTableRawSize; i++ {
-			if rawTable[i] > 0 {
+			if tableRawBuffer[i] > 0 {
 				tableSparseBuffer[sparseSize] = byte(i)
 				sparseSize++
-				tableSparseBuffer[sparseSize] = byte(rawTable[i])
+				tableSparseBuffer[sparseSize] = tableRawBuffer[i]
 				sparseSize++
 			}
 		}
@@ -128,5 +134,5 @@ func packCanonicalTable(codeLengths map[int]int) (byte, []byte, error) {
 	if sparseSize < canonicalTableRawSize {
 		return tableModeSparse, tableSparseBuffer[:sparseSize], nil
 	}
-	return tableModeRaw, rawTable[:], nil
+	return tableModeRaw, tableRawBuffer, nil
 }

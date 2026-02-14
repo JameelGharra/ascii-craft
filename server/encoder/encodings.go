@@ -10,42 +10,49 @@ import (
 
 var ErrEncoderExceededBufferSize = errors.New("encoder exceeded out buffer, not good")
 
-func XorRLE(frame *EncodingFrame) error {
-	if frame.Prev == nil {
-		frame.Len = len(frame.Out) + 1
-		return nil
+func Raw(frame *EncodingFrame, curr, prev []byte) error {
+	copy(frame.Out, curr)
+	frame.Len = len(curr)
+	frame.FinalSize = frame.Len
+	frame.Encoding = NONE
+	return nil
+}
+
+func XorRLE(frame *EncodingFrame, curr, prev []byte) error {
+	var input []byte
+
+	if frame.IsKeyFrame {
+		input = curr
+	} else {
+		ascii.Xor(prev, curr, frame.Temp)
+		input = frame.Temp
 	}
-	ascii.Xor(frame.Curr, frame.Prev, frame.Temp)
 	frame.RLE.Reset(frame.Out)
-	frame.RLE.Write(frame.Temp)
+	frame.RLE.Write(input)
 	frame.RLE.Finish()
 	frame.Len = frame.RLE.Size()
+	frame.FinalSize = frame.Len
 	frame.Encoding = XOR_RLE
 	return nil
 }
 
-func createIteratorFromFrame(frame *EncodingFrame) (iter utils.IByteIterator) {
-	if frame.Stride == 2 {
-		iter = utils.New16BitIterator(frame.Curr)
-	} else {
-		iter = utils.New8BitIterator(frame.Curr)
-	}
-	return iter
-}
+// side note that len property does not include meta for e.g. huff code length tables
+func Huffman(frame *EncodingFrame, curr, prev []byte) error {
+	var input []byte
 
-func Huffman(frame *EncodingFrame) error {
-	if frame.Prev == nil {
-		frame.Len = len(frame.Out) + 1
-		return nil
+	if frame.IsKeyFrame {
+		input = curr
+	} else {
+		ascii.Xor(prev, curr, frame.Temp)
+		input = frame.Temp
 	}
-	ascii.Xor(frame.Prev, frame.Curr, frame.Temp)
 	frame.Freq.Reset()
-	frame.Freq.Count(utils.New8BitIterator(frame.Temp))
+	frame.Freq.Count(utils.New8BitIterator(input))
 	huff, err := huffman.NewHuffman(&frame.Freq)
 	if err != nil {
 		return err
 	}
-	bitLen, err := huff.Encode(utils.New8BitIterator(frame.Temp), frame.Out)
+	bitLen, err := huff.Encode(utils.New8BitIterator(input), frame.Out)
 	if err != nil {
 		return err
 	}
@@ -55,37 +62,17 @@ func Huffman(frame *EncodingFrame) error {
 	} else {
 		byteLen = bitLen / 8
 	}
-	// for canonical tree
-	frame.RLE.Reset(frame.Temp)
-	var table [256]byte
-	for val, length := range huff.ValToCodeLength {
-		table[val] = byte(length)
-	}
-	frame.RLE.Write(table[:])
-	frame.RLE.Finish()
 
-	var tableSize = frame.RLE.Size()
-	var sparseSize = frame.Freq.TotalDifferentChars * 2
-	if sparseSize < tableSize {
-		tableSize = sparseSize
-	}
-	if tableSize > 256 {
-		tableSize = 256
-	}
-	// fmt.Printf("Huffman tree size: %d bytes\n", frame.RLE.Size())
-	// fmt.Printf("Huffman encoded data size: %d bytes\n", byteLen)
-	// result, _ := frame.RLE.Result()
-	// fmt.Printf("RLE result: %v\n", result)
-	// fmt.Printf("Frequency count for frame: %v\n", frame.Freq.TotalDifferentChars)
-	// fmt.Printf("Picked size for table: %d bytes\n", tableSize)
-	//
-	finalSize := byteLen + tableSize
-	if finalSize > len(frame.Curr) {
-		frame.Len = len(frame.Curr) + 1
+	if byteLen > len(curr) { // dont bother with huff at this point
+		frame.Len = len(curr) + 1
+		frame.FinalSize = frame.Len
 		return nil
 	}
 
-	frame.Len = finalSize
+	tableSize, err := huff.GetTableSize()
+	frame.FinalSize = byteLen + tableSize
+	frame.Len = byteLen
+	frame.Huff = huff
 	frame.Encoding = HUFFMAN
 	return nil
 }

@@ -55,8 +55,6 @@ func (c *Client) WriteCommand(cmdType uint32, value int32) error {
 	return nil
 }
 
-var Collisions int = 0
-
 func (c *Client) TryReadFrame() (*ascii.Frame, bool) {
 	currSeq := atomic.LoadUint32(&c.shm.FrameSeq)
 	if currSeq%2 != 0 || currSeq == c.lastSeq {
@@ -85,7 +83,6 @@ func (c *Client) TryReadFrame() (*ascii.Frame, bool) {
 	copy(c.pixelBuf, src)
 	seqAfter := atomic.LoadUint32(&c.shm.FrameSeq)
 	if seqAfter != currSeq { // torn frames
-		Collisions++
 		return nil, false
 	}
 	c.lastSeq = currSeq

@@ -16,12 +16,15 @@ var (
 	ErrNoNeedHuffmanEncoding      = errors.New("no need for huffman encoding, data too small")
 	ErrHuffmanFailedToWrite       = errors.New("huffman failed to write to output")
 	ErrHuffmanPackingDoesntFit    = errors.New("huffman packing doesn't fit in output buffer")
+	ErrHuffmanPackingFailure      = errors.New("huffman packing failure")
 )
 
 type Huffman struct {
-	encodeTable         map[int][]byte
-	treeDecodeTraverser *HuffmanTreeDecodeTraverser
-	ValToCodeLength     map[int]int
+	encodeTable            map[int][]byte
+	treeDecodeTraverser    *HuffmanTreeDecodeTraverser
+	ValToCodeLength        map[int]int
+	cachedPacketTableBytes []byte
+	cachedMetaMode         byte
 }
 
 func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
@@ -37,9 +40,11 @@ func NewHuffman(freqTable *ascii.FreqTable) (*Huffman, error) {
 	valToCode := generateCanonicalCodes(valToCodeLength)
 	decodeTreeRoot := buildCanonicalDecodeTree(valToCode)
 	return (&Huffman{
-		encodeTable:         valToCode,
-		treeDecodeTraverser: NewHuffmanTreeDecodeTraverser(decodeTreeRoot),
-		ValToCodeLength:     valToCodeLength,
+		encodeTable:            valToCode,
+		treeDecodeTraverser:    NewHuffmanTreeDecodeTraverser(decodeTreeRoot),
+		ValToCodeLength:        valToCodeLength,
+		cachedPacketTableBytes: nil,
+		cachedMetaMode:         0,
 	}), nil
 }
 
@@ -110,7 +115,48 @@ func (h *Huffman) Decode(dataToDecode []byte, encodingBitLen int, writer utils.B
 	return nil
 }
 
-// encodes the huffman tree and bit length into the output buffer at the given offset
-func IntoBytes(h *Huffman, bitLen int, out []byte, offset int) {
+// gets the table size to be stored inside the packet later on
+func (h *Huffman) GetTableSize() (int, error) {
+	if h.cachedPacketTableBytes != nil {
+		size := len(h.cachedPacketTableBytes)
+		if h.cachedMetaMode != tableModeRaw {
+			size++ // prefix meta byte
+		}
+		return size, nil
+	}
+	metaMode, packedData, err := packCanonicalTable(h.ValToCodeLength)
+	if err != nil {
+		return 0, err
+	}
+	size := len(packedData)
+	h.cachedPacketTableBytes = packedData
+	h.cachedMetaMode = metaMode
+	if metaMode != tableModeRaw {
+		size++
+	}
+	return size, nil
+}
 
+func (h *Huffman) WriteTableBytes(dst []byte) (byte, int, error) {
+	if h.cachedPacketTableBytes == nil {
+		_, err := h.GetTableSize()
+		if err != nil {
+			return 0, 0, errors.Join(ErrHuffmanPackingFailure, err)
+		}
+	}
+	bytesToWrite := len(h.cachedPacketTableBytes)
+	offset := 0
+	if h.cachedMetaMode != tableModeRaw {
+		if len(dst) < 1 {
+			return 0, 0, ErrHuffmanPackingDoesntFit
+		}
+		dst[0] = byte(len(h.cachedPacketTableBytes))
+		bytesToWrite++
+		offset++
+	}
+	if bytesToWrite > len(dst) {
+		return 0, 0, ErrHuffmanPackingDoesntFit
+	}
+	copy(dst[offset:], h.cachedPacketTableBytes)
+	return h.cachedMetaMode, bytesToWrite, nil
 }

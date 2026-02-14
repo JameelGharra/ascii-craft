@@ -1,10 +1,14 @@
 package huffman
 
-import "sort"
+import (
+	"errors"
+	"sort"
 
-var (
-	depthUpBoundary = 33                            // max depth usually won't exceed 32
-	bitBuffer       = make([]byte, depthUpBoundary) // just to avoid multiple allocations
+	"github.com/JameelGharra/ascii-craft/server/encoding"
+)
+
+const (
+	depthUpBoundary = 33 // max depth usually won't exceed 32
 )
 
 func generateCanonicalCodes(codeLengths map[int]int) map[int][]byte {
@@ -39,7 +43,7 @@ func generateCanonicalCodes(codeLengths map[int]int) map[int][]byte {
 }
 
 func intToBits(code, length int) []byte {
-	out := bitBuffer[:length]
+	out := make([]byte, length)
 	for i := 0; i < length; i++ {
 		bit := (code >> (length - i - 1)) & 1
 		out[i] = byte(bit)
@@ -67,4 +71,67 @@ func buildCanonicalDecodeTree(valToCode map[int][]byte) *HuffmanDecodeNode {
 		currentNode.value = val
 	}
 	return root
+}
+
+const (
+	tableModeRaw          byte = 0
+	tableModeRLE          byte = 1
+	tableModeSparse       byte = 2
+	canonicalTableRawSize      = 256
+)
+
+var (
+	ErrInvalidCanonicalTable                    = errors.New("invalid canonical table, cannot be packed")
+	ErrEmptyCanonicalTable                      = errors.New("empty canonical table provided")
+	tableRLEBuffer           []byte             = make([]byte, canonicalTableRawSize)
+	tableSparseBuffer        []byte             = make([]byte, canonicalTableRawSize) // wont bother using if input not half of raw so its ok
+	tableRawBuffer           []byte             = make([]byte, canonicalTableRawSize)
+	RLEEncoder               *encoding.AsciiRLE = encoding.NewAsciiRLE()
+)
+
+// it picks the best strategy out of the meta modes and pack accordingly
+// would return the meta mode, amoutnt of bytes written and an error if any
+// current strategies are raw, rle and spare (pairs of value and length)
+func packCanonicalTable(codeLengths map[int]int) (byte, []byte, error) {
+	if len(codeLengths) == 0 {
+		return 0, nil, ErrEmptyCanonicalTable
+	}
+	if len(codeLengths) > canonicalTableRawSize {
+		return 0, nil, ErrInvalidCanonicalTable
+	}
+	for i := 0; i < canonicalTableRawSize; i++ {
+		tableRawBuffer[i] = 0
+	}
+	RLEEncoder.Reset(tableRLEBuffer)
+	for val, length := range codeLengths {
+		if val < 0 || val >= canonicalTableRawSize {
+			return 0, nil, ErrInvalidCanonicalTable
+		}
+		tableRawBuffer[val] = byte(length)
+	}
+	RLEEncoder.Write(tableRawBuffer)
+	RLEEncoder.Finish()
+	rleSize := RLEEncoder.Size()
+	sparseSize := canonicalTableRawSize
+	if len(codeLengths) < canonicalTableRawSize/2 { // would send raw if equal
+		sparseSize = 0
+		// I know that iterating over the map is faster, but keeping
+		// a deterministic order sounds a better idea for tests
+		for i := 0; i < canonicalTableRawSize; i++ {
+			if tableRawBuffer[i] > 0 {
+				tableSparseBuffer[sparseSize] = byte(i)
+				sparseSize++
+				tableSparseBuffer[sparseSize] = tableRawBuffer[i]
+				sparseSize++
+			}
+		}
+	}
+	// this would rather rle over sparse if they equal
+	if rleSize < canonicalTableRawSize && rleSize <= sparseSize {
+		return tableModeRLE, tableRLEBuffer[:rleSize], nil
+	}
+	if sparseSize < canonicalTableRawSize {
+		return tableModeSparse, tableSparseBuffer[:sparseSize], nil
+	}
+	return tableModeRaw, tableRawBuffer, nil
 }

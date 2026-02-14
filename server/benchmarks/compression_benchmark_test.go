@@ -119,6 +119,7 @@ initLoop:
 	}
 
 	frameEncoder := encoder.NewEncoder(width*height, Stride)
+	frameEncoder.AddEncoding(encoder.Raw)
 	frameEncoder.AddEncoding(encoder.XorRLE)
 	frameEncoder.AddEncoding(encoder.Huffman)
 

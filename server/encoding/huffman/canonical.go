@@ -7,9 +7,8 @@ import (
 	"github.com/JameelGharra/ascii-craft/server/encoding"
 )
 
-var (
-	depthUpBoundary = 33                            // max depth usually won't exceed 32
-	bitBuffer       = make([]byte, depthUpBoundary) // just to avoid multiple allocations
+const (
+	depthUpBoundary = 33 // max depth usually won't exceed 32
 )
 
 func generateCanonicalCodes(codeLengths map[int]int) map[int][]byte {
@@ -44,7 +43,7 @@ func generateCanonicalCodes(codeLengths map[int]int) map[int][]byte {
 }
 
 func intToBits(code, length int) []byte {
-	out := bitBuffer[:length]
+	out := make([]byte, length)
 	for i := 0; i < length; i++ {
 		bit := (code >> (length - i - 1)) & 1
 		out[i] = byte(bit)

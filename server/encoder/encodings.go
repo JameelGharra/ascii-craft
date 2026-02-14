@@ -10,21 +10,21 @@ import (
 
 var ErrEncoderExceededBufferSize = errors.New("encoder exceeded out buffer, not good")
 
-func Raw(frame *EncodingFrame) error {
-	copy(frame.Out, frame.Curr)
-	frame.Len = len(frame.Curr)
+func Raw(frame *EncodingFrame, curr, prev []byte) error {
+	copy(frame.Out, curr)
+	frame.Len = len(curr)
 	frame.FinalSize = frame.Len
 	frame.Encoding = NONE
 	return nil
 }
 
-func XorRLE(frame *EncodingFrame) error {
+func XorRLE(frame *EncodingFrame, curr, prev []byte) error {
 	var input []byte
 
 	if frame.IsKeyFrame {
-		input = frame.Curr
+		input = curr
 	} else {
-		ascii.Xor(frame.Curr, frame.Prev, frame.Temp)
+		ascii.Xor(prev, curr, frame.Temp)
 		input = frame.Temp
 	}
 	frame.RLE.Reset(frame.Out)
@@ -36,23 +36,14 @@ func XorRLE(frame *EncodingFrame) error {
 	return nil
 }
 
-// func createIteratorFromFrame(frame *EncodingFrame) (iter utils.IByteIterator) {
-// 	if frame.Stride == 2 {
-// 		iter = utils.New16BitIterator(frame.Curr)
-// 	} else {
-// 		iter = utils.New8BitIterator(frame.Curr)
-// 	}
-// 	return iter
-// }
-
 // side note that len property does not include meta for e.g. huff code length tables
-func Huffman(frame *EncodingFrame) error {
+func Huffman(frame *EncodingFrame, curr, prev []byte) error {
 	var input []byte
 
 	if frame.IsKeyFrame {
-		input = frame.Curr
+		input = curr
 	} else {
-		ascii.Xor(frame.Prev, frame.Curr, frame.Temp)
+		ascii.Xor(prev, curr, frame.Temp)
 		input = frame.Temp
 	}
 	frame.Freq.Reset()
@@ -72,8 +63,8 @@ func Huffman(frame *EncodingFrame) error {
 		byteLen = bitLen / 8
 	}
 
-	if byteLen > len(frame.Curr) { // dont bother with huff at this point
-		frame.Len = len(frame.Curr) + 1
+	if byteLen > len(curr) { // dont bother with huff at this point
+		frame.Len = len(curr) + 1
 		frame.FinalSize = frame.Len
 		return nil
 	}

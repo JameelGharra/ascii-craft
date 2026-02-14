@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	TotalFrames = 1000000
+	TotalFrames = 10000
+	Stride      = 1
 )
 
 type CompressionStat struct {
@@ -117,12 +118,7 @@ initLoop:
 		}
 	}
 
-	frameEncoder := encoder.NewEncoder(width*height, quad_tree.QuadTreeParam{
-		Depth:  2,
-		Rows:   height,
-		Cols:   width,
-		Stride: 1,
-	})
+	frameEncoder := encoder.NewEncoder(width*height, Stride)
 	frameEncoder.AddEncoding(encoder.XorRLE)
 	frameEncoder.AddEncoding(encoder.Huffman)
 
@@ -215,9 +211,7 @@ initLoop:
 		}
 		totalHuffBoxEverything += totalHuffSerialSize + totalHuffBitsBoxesInBytes
 
-		var newFrame = make([]byte, len(coloredFrame))
-		copy(newFrame, coloredFrame)
-		result := frameEncoder.PushFrame(newFrame)
+		result := frameEncoder.PushFrame(coloredFrame, false)
 
 		origSize := len(coloredFrame)
 		compSize := 0

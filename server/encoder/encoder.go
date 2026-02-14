@@ -4,19 +4,12 @@ import (
 	"errors"
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
-	"github.com/JameelGharra/ascii-craft/server/ascii/quad_tree"
 	"github.com/JameelGharra/ascii-craft/server/encoding"
 	"github.com/JameelGharra/ascii-craft/server/encoding/huffman"
 	"github.com/JameelGharra/ascii-craft/server/protocol"
 )
 
 type EncodingFrame struct {
-	Prev []byte
-	Curr []byte
-
-	CurrQT quad_tree.QuadTree
-	PrevQT quad_tree.QuadTree
-
 	RLE  encoding.AsciiRLE
 	Freq ascii.FreqTable
 	Huff *huffman.Huffman
@@ -32,79 +25,62 @@ type EncodingFrame struct {
 	Encoding   byte
 }
 
-func NewEncodingFrame(size int, params quad_tree.QuadTreeParam) *EncodingFrame {
-	out := make([]byte, size)
-	prevQt := quad_tree.Partition(out, params)
-	currQt := quad_tree.Partition(out, params)
+func NewEncodingFrame(size, stride int) *EncodingFrame {
 	return &EncodingFrame{
-		Prev:   nil,
-		PrevQT: prevQt,
-
-		Curr:   nil,
-		CurrQT: currQt,
-
 		RLE:       *encoding.NewAsciiRLE(),
 		Huff:      nil,
-		Out:       out,
+		Out:       make([]byte, size),
 		Len:       0,
 		FinalSize: 0,
-		Stride:    params.Stride,
+		Stride:    stride,
 		Temp:      make([]byte, size),
 		TempLen:   0,
 		Freq:      *ascii.NewFrequency(),
 	}
 }
 
-func (ef *EncodingFrame) pushFrame(frame []byte) {
-	ef.Prev = ef.Curr
-	ef.Curr = frame
-
-	ef.CurrQT.UpdateBuffer(ef.Curr)
-	if ef.Prev != nil {
-		ef.PrevQT.UpdateBuffer(ef.Prev)
-	}
-}
-
-type EncodingCall func(frame *EncodingFrame) error
+type EncodingCall func(frame *EncodingFrame, curr, prev []byte) error
 
 type Encoder struct {
-	encodings      []EncodingCall
-	frames         []*EncodingFrame
-	size           int
-	quadTreeParams quad_tree.QuadTreeParam
-	lastBestFrame  *EncodingFrame
-	sequence       uint32
+	encodings     []EncodingCall
+	frames        []*EncodingFrame
+	size          int
+	prevFrame     []byte
+	lastBestFrame *EncodingFrame
+	sequence      uint32
+	stride        int
 }
 
-func NewEncoder(size int, treeParams quad_tree.QuadTreeParam) *Encoder {
+func NewEncoder(size, stride int) *Encoder {
 	return &Encoder{
-		encodings:      make([]EncodingCall, 0),
-		frames:         make([]*EncodingFrame, 0),
-		size:           size,
-		quadTreeParams: treeParams,
-		lastBestFrame:  nil,
-		sequence:       0,
+		encodings:     make([]EncodingCall, 0),
+		frames:        make([]*EncodingFrame, 0),
+		size:          size,
+		prevFrame:     nil,
+		lastBestFrame: nil,
+		stride:        stride,
+		sequence:      0,
 	}
 }
 
 func (e *Encoder) AddEncoding(encoding EncodingCall) {
 	e.encodings = append(e.encodings, encoding)
-	e.frames = append(e.frames, NewEncodingFrame(e.size, e.quadTreeParams))
+	e.frames = append(e.frames, NewEncodingFrame(e.size, e.stride))
 }
 
 // if this is the very first frame no matter what value for forceKeyFrame, it would be
 // treated as a key frame
+// another note, this assumes that the caller does not cache the buffer passed otherwise
 func (e *Encoder) PushFrame(rawData []byte, forceKeyFrame bool) *EncodingFrame {
-	minSizeTarget := len(rawData)
+	minSizeTarget := len(rawData) + 1
 	var outFrame *EncodingFrame
 	for i, encoding := range e.encodings {
 		frame := e.frames[i]
 		frame.IsKeyFrame = forceKeyFrame
-		if frame.Prev == nil {
+		if e.prevFrame == nil {
 			frame.IsKeyFrame = true
 		}
-		frame.pushFrame(rawData)
-		err := encoding(frame)
+		err := encoding(frame, rawData, e.prevFrame)
 		if err != nil {
 			continue
 		}
@@ -114,6 +90,10 @@ func (e *Encoder) PushFrame(rawData []byte, forceKeyFrame bool) *EncodingFrame {
 		}
 	}
 	e.lastBestFrame = outFrame
+	if e.prevFrame == nil || len(e.prevFrame) != len(rawData) {
+		e.prevFrame = make([]byte, len(rawData))
+	}
+	copy(e.prevFrame, rawData)
 	e.sequence++
 	return outFrame
 }
@@ -129,7 +109,7 @@ const (
 	// bits 3-4 for meta mode
 )
 
-// [FLAGS] [SEQ] [DATA LEN (varint)] [META (varint)] [DATA]
+// [FLAGS] [SEQ] [DATA LEN (varint)] [META LEN + TABLE (variable)] [DATA]
 func (e *Encoder) WriteTo(pb *protocol.PacketBuilder) error {
 	frame := e.lastBestFrame
 	if frame == nil {

@@ -137,7 +137,7 @@ func (e *Encoder) WriteTo(pb *protocol.PacketBuilder) error {
 		flags |= FlagIsDelta
 	}
 	switch frame.Encoding {
-	case XOR_HUFFMAN:
+	case XOR_HUFFMAN, HUFFMAN:
 		flags |= FlagMethod
 		if frame.Huff == nil {
 			return ErrHuffmanNotPerformed

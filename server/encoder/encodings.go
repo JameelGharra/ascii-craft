@@ -73,6 +73,10 @@ func Huffman(frame *EncodingFrame, curr, prev []byte) error {
 	frame.FinalSize = byteLen + tableSize
 	frame.Len = byteLen
 	frame.Huff = huff
-	frame.Encoding = HUFFMAN
+	if frame.IsKeyFrame {
+		frame.Encoding = HUFFMAN
+	} else {
+		frame.Encoding = XOR_HUFFMAN
+	}
 	return nil
 }

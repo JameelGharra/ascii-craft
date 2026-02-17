@@ -97,11 +97,11 @@ func main() {
 
 	close(done)
 	fmt.Println("\n\n--- RESULTS ---")
-	if ipc.Collisions > 0 {
-		fmt.Printf("WARNING: Detected %d frame tears (Collisions avoided)\n", ipc.Collisions)
-	} else {
-		fmt.Println("No collisions detected (Synchronization perfect).")
-	}
+	// if ipc.Collisions > 0 {
+	// 	fmt.Printf("WARNING: Detected %d frame tears (Collisions avoided)\n", ipc.Collisions)
+	// } else {
+	// 	fmt.Println("No collisions detected (Synchronization perfect).")
+	// }
 	printIPCStats(frameCount, latencies, lengths)
 }
 

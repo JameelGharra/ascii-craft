@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	TotalFrames = 1000
+	TotalFrames = 10000
 	BinaryPath  = "../game/craft.exe"
 	Stride      = 1
+	RefreshRate = 120 // after how much frames to send key frame (i-frame)
 )
 
 func main() {
@@ -97,7 +98,7 @@ initLoop:
 	frameEncoder := encoder.NewEncoder(width*height, Stride)
 	frameEncoder.AddEncoding(encoder.Raw)
 	frameEncoder.AddEncoding(encoder.XorRLE)
-	frameEncoder.AddEncoding(encoder.Huffman)
+	// frameEncoder.AddEncoding(encoder.Huffman)
 
 	coloredFrame := make([]byte, width*height)
 
@@ -129,6 +130,7 @@ initLoop:
 			subprocessCmd:        cmd,
 			packetInternalBuffer: packetInternalBuffer,
 			conn:                 conn,
+			refreshAfterFrames:   RefreshRate,
 		})
 
 		// 3. Cleanup before retrying
@@ -153,6 +155,7 @@ type FrameLooperConfig struct {
 	subprocessCmd        *exec.Cmd
 	packetInternalBuffer []byte
 	conn                 net.Conn
+	refreshAfterFrames   int
 }
 
 // if we looped total frames successfully returns true, otherwise false
@@ -163,7 +166,7 @@ func loopingForFrames(config FrameLooperConfig) bool {
 	lastFrameTime := time.Now()
 	packetBuilder := protocol.NewPacketBuilder(config.packetInternalBuffer)
 	var headerbuff [5]byte
-
+	var isKeyFrame bool = true
 	for frameNum := 0; frameNum < TotalFrames; {
 		select {
 		case err := <-config.gameProcessDone:
@@ -197,7 +200,8 @@ func loopingForFrames(config FrameLooperConfig) bool {
 
 		frame.ToColor8bit(config.frameBuffer)
 
-		result := config.encoderToUse.PushFrame(config.frameBuffer, false)
+		isKeyFrame = frameNum%config.refreshAfterFrames == 0
+		result := config.encoderToUse.PushFrame(config.frameBuffer, isKeyFrame)
 		fmt.Printf("Frame %d: Original=%d bytes, Compressed (Best)=%d bytes - Type: (%v)\n", frameNum, len(config.frameBuffer), result.FinalSize, result.Encoding)
 		packetBuilder.Reset()
 		err := config.encoderToUse.WriteTo(packetBuilder)

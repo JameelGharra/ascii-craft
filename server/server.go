@@ -98,7 +98,7 @@ initLoop:
 	frameEncoder := encoder.NewEncoder(width*height, Stride)
 	frameEncoder.AddEncoding(encoder.Raw)
 	frameEncoder.AddEncoding(encoder.XorRLE)
-	// frameEncoder.AddEncoding(encoder.Huffman)
+	frameEncoder.AddEncoding(encoder.Huffman)
 
 	coloredFrame := make([]byte, width*height)
 

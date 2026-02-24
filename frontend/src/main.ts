@@ -7,6 +7,7 @@ import { Renderer } from "./renderer";
 const WIDTH = 212;
 const HEIGHT = 66;
 const TOTAL_PIXELS = WIDTH * HEIGHT;
+const MAX_CHAT_MESSAGES = 35; // would delete the early ones in the queue, set to 35 to have some scroll
 
 class GameClient {
     private ws: WebSocket | null = null;
@@ -19,6 +20,12 @@ class GameClient {
 
     private hasReceivedKeyFrame = false;
 
+    // ui elements
+    private chatLog: HTMLDivElement;
+    private chatInput: HTMLInputElement;
+    private statusEl: HTMLDivElement;
+    
+
     constructor(canvasId: string) {
         const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         this.renderer = new Renderer(canvas, WIDTH, HEIGHT);
@@ -26,23 +33,74 @@ class GameClient {
         this.currFrame = new Uint8Array(TOTAL_PIXELS);
         this.huffman = new HuffmanDecoder();
         this.lastSeq = -1;
+        this.chatLog = document.getElementById("chat-log") as HTMLDivElement;
+        this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
+        this.statusEl = document.getElementById("status") as HTMLDivElement;
+        this.setupInputListener();
     }
 
     public connect(url: string) {
        this.ws = new WebSocket(url);
         this.ws.binaryType = "arraybuffer";
 
-        const statusEl = document.getElementById("status");
-
         this.ws.onopen = () => {
             console.log("Connected to relay");
-            if(statusEl) statusEl.innerText = "Connected";
+            if(this.statusEl) this.statusEl.innerText = "Connected";
         }
         this.ws.onclose = () => {
             console.log("Disconnected");
-            if(statusEl) statusEl.innerText = "Disconnected";
+            if(this.statusEl) this.statusEl.innerText = "Disconnected";
         }
-        this.ws.onmessage = (e) => this.handlePacket(e.data);
+        this.ws.onmessage = (e) => {
+            if(typeof e.data === "string") {
+                this.handleChatMessage(e.data);
+            } else if(e.data instanceof ArrayBuffer) {
+                this.handlePacket(e.data);
+            }
+        }
+    }
+
+    private setupInputListener() {
+        this.chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const msg = this.chatInput.value.trim();
+                if (msg) {
+                    this.sendCommand(msg);
+                    this.chatInput.value = ''; // clear input
+                }
+            }
+        });
+    }
+    
+    private appendChat(sender: string, message: string, cssClass: string) {
+        const el = document.createElement("div");
+        el.className = "chat-msg";
+        el.innerHTML = `<span class="${cssClass}">${sender}:</span> <span class="msg-text">${this.escapeHtml(message)}</span>`;
+        this.chatLog.appendChild(el);
+        while (this.chatLog.childElementCount > MAX_CHAT_MESSAGES) {
+            this.chatLog.removeChild(this.chatLog.firstChild!);
+        }
+        this.chatLog.scrollTop = this.chatLog.scrollHeight; // auto scroll
+    }
+
+    private escapeHtml(unsafe: string) {
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+    
+    private sendCommand(msg: string) {
+        if(this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(msg);
+            this.appendChat("You", msg, "user");
+        }
+    }
+    private handleChatMessage(msg: string) {
+        // just to tell what majority was chosen
+        this.appendChat("Server", msg, "server");
     }
 
     private handlePacket(rawBuffer: ArrayBuffer) {
@@ -58,7 +116,7 @@ class GameClient {
 
         const seq = reader.readVarint();
         const dataLen = reader.readVarint(); // have no usage for it atm, since it is at the end anyway
-
+        console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
         if(this.lastSeq !== -1 && seq <= this.lastSeq) {
             return ; // older packet sent (pretty rare, but why not)
         }

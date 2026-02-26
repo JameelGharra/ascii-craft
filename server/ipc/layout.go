@@ -28,6 +28,11 @@ const (
 	CmdJumpBackward = 15
 	CmdJumpLeft     = 16
 	CmdJumpRight    = 17
+
+	MinSupportedSlotIdx = 0
+	MaxSupportedSlotIdx = 9
+
+	IgnoredDefaultValue = 0
 )
 
 type SharedMemoryLayout struct {

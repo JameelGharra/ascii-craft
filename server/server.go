@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"math/rand"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/JameelGharra/ascii-craft/server/encoder"
@@ -17,11 +20,32 @@ import (
 )
 
 const (
-	TotalFrames = 10000
-	BinaryPath  = "../game/craft.exe"
-	Stride      = 1
-	RefreshRate = 120 // after how much frames to send key frame (i-frame)
+	TotalFrames    = 10000
+	BinaryPath     = "../game/craft.exe"
+	Stride         = 1
+	RefreshRate    = 120 // after how much frames to send key frame (i-frame)
+	BotMode        = 0   // rng based cmds
+	ControlledMode = 1
 )
+
+var commandMap = map[string]uint32{
+	"!w":            ipc.CmdForward,
+	"!s":            ipc.CmdBackward,
+	"!a":            ipc.CmdLeft,
+	"!d":            ipc.CmdRight,
+	"!jump":         ipc.CmdJump,
+	"!fly":          ipc.CmdFly,
+	"!build":        ipc.CmdBuild,
+	"!destroy":      ipc.CmdDestroy,
+	"!turnleft":     ipc.CmdTurnLeft,
+	"!turnright":    ipc.CmdTurnRight,
+	"!lookup":       ipc.CmdLookUp,
+	"!lookdown":     ipc.CmdLookDown,
+	"!jumpforward":  ipc.CmdJumpForward,
+	"!jumpbackward": ipc.CmdJumpBackward,
+	"!jumpleft":     ipc.CmdJumpLeft,
+	"!jumpright":    ipc.CmdJumpRight,
+}
 
 func main() {
 	absPath, err := filepath.Abs(BinaryPath)
@@ -101,6 +125,7 @@ initLoop:
 	frameEncoder.AddEncoding(encoder.Huffman)
 
 	coloredFrame := make([]byte, width*height)
+	runMode := ControlledMode
 
 	for {
 		// 1. Dial the Relay
@@ -114,6 +139,19 @@ initLoop:
 			}
 			// Retry every 1s if Relay is down
 			time.Sleep(1 * time.Second)
+		}
+
+		if runMode == ControlledMode {
+			go func(c net.Conn, gc *ipc.Client) {
+				scanner := bufio.NewScanner(c)
+				for scanner.Scan() {
+					cmdStr := scanner.Text()
+					handleRemoteCommand(cmdStr, gc)
+				}
+				if err := scanner.Err(); err != nil {
+					fmt.Printf("Relay connection error: %v\n", err)
+				}
+			}(conn, client)
 		}
 
 		// 2. The Frame Loop (Existing logic)
@@ -131,6 +169,7 @@ initLoop:
 			packetInternalBuffer: packetInternalBuffer,
 			conn:                 conn,
 			refreshAfterFrames:   RefreshRate,
+			runMode:              runMode,
 		})
 
 		// 3. Cleanup before retrying
@@ -156,6 +195,7 @@ type FrameLooperConfig struct {
 	packetInternalBuffer []byte
 	conn                 net.Conn
 	refreshAfterFrames   int
+	runMode              int
 }
 
 // if we looped total frames successfully returns true, otherwise false
@@ -180,8 +220,7 @@ func loopingForFrames(config FrameLooperConfig) bool {
 			fmt.Printf("Game stopped producing frames at %d (hang/deadlock detected)\n", frameNum)
 			return true
 		}
-
-		if config.rng.Float64() < 0.05 {
+		if config.runMode == BotMode && config.rng.Float64() < 0.05 {
 			cmdType := config.commands[config.rng.Intn(len(config.commands))]
 			var val int32 = 0
 			if cmdType == ipc.CmdSelectSlot {
@@ -227,4 +266,27 @@ func loopingForFrames(config FrameLooperConfig) bool {
 		config.subprocessCmd.Process.Kill()
 	}
 	return true
+}
+
+func handleRemoteCommand(rawCmd string, gameClient *ipc.Client) {
+	rawCmd = strings.TrimSpace((strings.ToLower(rawCmd)))
+	if rawCmd == "" {
+		return
+	}
+	if strings.HasPrefix(rawCmd, "!slot ") {
+		parts := strings.Split(rawCmd, " ")
+		if len(parts) == 2 {
+			val, err := strconv.Atoi(parts[1])
+			if err == nil && val >= ipc.MinSupportedSlotIdx && val <= ipc.MaxSupportedSlotIdx {
+				gameClient.WriteCommand(ipc.CmdSelectSlot, int32(val))
+			}
+		}
+		return
+	}
+	if cmdType, exists := commandMap[rawCmd]; exists {
+		gameClient.WriteCommand(cmdType, ipc.IgnoredDefaultValue)
+		fmt.Printf("Execute remote command: %s\n", rawCmd)
+	} else {
+		fmt.Printf("Unknown command received: %s\n", rawCmd)
+	}
 }

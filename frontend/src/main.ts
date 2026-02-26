@@ -8,6 +8,7 @@ const WIDTH = 212;
 const HEIGHT = 66;
 const TOTAL_PIXELS = WIDTH * HEIGHT;
 const MAX_CHAT_MESSAGES = 35; // would delete the early ones in the queue, set to 35 to have some scroll
+const COOLDOWN_MS = 500; // cooldown for sending commands to prevent spamming
 
 class GameClient {
     private ws: WebSocket | null = null;
@@ -19,6 +20,7 @@ class GameClient {
     private  lastSeq: number; // detecting frame gaps
 
     private hasReceivedKeyFrame = false;
+    private isOnCooldown = false; // to prevent spamming cmds
 
     // ui elements
     private chatLog: HTMLDivElement;
@@ -63,15 +65,31 @@ class GameClient {
     private setupInputListener() {
         this.chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                if(this.isOnCooldown) {
+                    return;
+                }
                 const msg = this.chatInput.value.trim();
                 if (msg) {
                     this.sendCommand(msg);
                     this.chatInput.value = ''; // clear input
+                    this.triggerCooldown();
                 }
             }
         });
     }
     
+    private triggerCooldown() {
+        this.isOnCooldown = true;
+        this.chatInput.disabled = true;
+        this.chatInput.placeholder = "Cooldown...";
+        setTimeout(() => {
+            this.isOnCooldown = false;
+            this.chatInput.disabled = false;
+            this.chatInput.placeholder = "Type command and press Enter...";
+            this.chatInput.focus();
+        }, COOLDOWN_MS);
+    }
+
     private appendChat(sender: string, message: string, cssClass: string) {
         const el = document.createElement("div");
         el.className = "chat-msg";

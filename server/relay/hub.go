@@ -1,13 +1,22 @@
 package main
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/gorilla/websocket"
 )
 
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
+	hub       *Hub
+	conn      *websocket.Conn
+	sendVideo chan []byte
+	sendText  chan string
+}
+
+type clientCommand struct { // mainly to add 1 user = 1 vote support
+	client *Client
+	cmd    string
 }
 
 type Hub struct {
@@ -15,6 +24,9 @@ type Hub struct {
 	broadcast  chan []byte          // msgs to send from gameserver
 	register   chan *Client
 	unregister chan *Client
+
+	commands chan clientCommand // cmds aggregated from clients
+	gameCmds chan string        // the cmds that won sent with tcp
 }
 
 func NewHub() *Hub {
@@ -23,32 +35,69 @@ func NewHub() *Hub {
 		broadcast:  make(chan []byte),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		commands:   make(chan clientCommand, 256),
+		gameCmds:   make(chan string, 10),
 	}
 }
 
 func (h *Hub) Run() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	votes := make(map[*Client]string)
+
 	for {
 		select {
-		// CASE 1: A new user joined
+		// new user joined
 		case client := <-h.register:
 			h.clients[client] = struct{}{}
 
-		// CASE 2: A user left
+		// user left
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send) // Tell the client's pump to stop
+				close(client.sendVideo) // Tell the client's pump to stop
 			}
 
-		// CASE 3: Video packet arrived from C game
+		// new frame from game
 		case packet := <-h.broadcast:
 			for client := range h.clients {
 				select {
-				case client.send <- packet:
+				case client.sendVideo <- packet:
 					// Success: Packet is in their mailbox.
 				default:
 					// DROP PACKET: The mailbox is full!
 					// This user is too slow. We skip them to keep the game fast for others.
+				}
+			}
+		case cmdClient := <-h.commands:
+			if _, alreadyVoted := votes[cmdClient.client]; !alreadyVoted {
+				votes[cmdClient.client] = cmdClient.cmd
+			}
+		case <-ticker.C:
+			if len(votes) > 0 {
+				tally := make(map[string]int)
+				for _, cmd := range votes {
+					tally[cmd]++
+				}
+				winner := ""
+				maxVotes := 0
+				for cmd, count := range tally {
+					if count > maxVotes {
+						maxVotes = count
+						winner = cmd
+					}
+				}
+				votes = make(map[*Client]string)
+				announcement := fmt.Sprintf("Majority voted for %s (%d votes)", winner, maxVotes)
+				for client := range h.clients {
+					select {
+					case client.sendText <- announcement:
+					default:
+					}
+				}
+				select {
+				case h.gameCmds <- winner:
+				default:
 				}
 			}
 		}
@@ -62,18 +111,28 @@ func (c *Client) writePump() {
 	}()
 
 	for {
+		select {
 		// Wait for a packet specifically for THIS user
-		packet, ok := <-c.send
-		if !ok {
-			// The Hub closed the channel, time to disconnect
-			return
-		}
+		case packet, ok := <-c.sendVideo:
+			if !ok {
+				// The Hub closed the channel, time to disconnect
+				return
+			}
 
-		// This is where the actual network waiting happens.
-		// It only blocks THIS client's goroutine.
-		err := c.conn.WriteMessage(websocket.BinaryMessage, packet)
-		if err != nil {
-			return
+			// This is where the actual network waiting happens.
+			// It only blocks THIS client's goroutine.
+			err := c.conn.WriteMessage(websocket.BinaryMessage, packet)
+			if err != nil {
+				return
+			}
+		case text, ok := <-c.sendText:
+			if !ok {
+				return
+			}
+			err := c.conn.WriteMessage(websocket.TextMessage, []byte(text))
+			if err != nil {
+				return
+			}
 		}
 	}
 }

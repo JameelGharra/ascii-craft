@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -21,6 +23,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+const maxMessageSize = 32
+
 func readPump(c *Client) {
 	defer func() {
 		c.hub.unregister <- c
@@ -29,11 +33,16 @@ func readPump(c *Client) {
 
 	for {
 		// Block until user sends message or disconnects
-		_, _, err := c.conn.ReadMessage()
+		msgType, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			break
 		}
-		// We ignore incoming messages for now
+		if msgType == websocket.TextMessage {
+			text := strings.TrimSpace(string(msg))
+			if len(text) > 0 && len(text) <= maxMessageSize {
+				c.hub.commands <- clientCommand{client: c, cmd: text}
+			}
+		}
 	}
 }
 func handleWebSocket(hub *Hub, w http.ResponseWriter, r *http.Request) {
@@ -46,9 +55,10 @@ func handleWebSocket(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	// 2. Create Client
 	client := &Client{
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, 64), // Buffer of 64 frames (~2 seconds)
+		hub:       hub,
+		conn:      conn,
+		sendVideo: make(chan []byte, 64), // Buffer of 64 frames (~2 seconds)
+		sendText:  make(chan string, 16), // Buffer of 16 chat messages
 	}
 
 	// 3. Register with Hub
@@ -94,6 +104,27 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 	defer conn.Close()
 	log.Println("Game Engine Connected!")
 
+	// context to cleanly kill the writer goroutine if game connection drops
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// tcp writer (relay -> game server)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return // reading failed
+			case cmd := <-hub.gameCmds:
+				_, err := fmt.Fprintf(conn, "%s\n", cmd)
+				if err != nil {
+					log.Println("Failed to write command to game server:", err)
+					return
+				}
+			}
+		}
+	}()
+
+	// tcp reader (game server -> relay)
 	// 4. Create a Buffered Reader
 	// CRITICAL PERFORMANCE OPTIMIZATION
 	reader := bufio.NewReader(conn)

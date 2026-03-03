@@ -147,25 +147,54 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 	}
 }
 
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*") // enables CORS so vite dev server can fetch this config
+	w.Header().Set("Content-Type", "application/json")
+	configJSON := `{
+		"video": {
+			"width": 212,
+			"height": 66
+		},
+		"chat": {
+			"cooldown_ms": 500,
+			"max_messages": 35
+		},
+		"commands": {
+			"standard":[
+				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy", 
+				"!turnleft", "!turnright", "!lookup", "!lookdown", 
+				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright"
+			],
+			"parameterized": {
+				"!slot": {"min": 0, "max": 9}
+			}
+		}
+	}`
+	w.Write([]byte(configJSON))
+}
+
 func main() {
 	fmt.Println("--- Starting ASCII Craft Relay ---")
 
-	// 1. Create and Start the Hub
-	// The Hub runs in its own background thread (Goroutine)
+	// create and start the hub
+	// the hub runs in its own background thread (goroutine)
 	hub := NewHub()
 	go hub.Run()
 
-	// 2. Start the TCP Server (Game Ingest)
-	// We run this in a Goroutine so it doesn't block the HTTP server below
+	// start the TCP Server (game ingest)
+	// we run this in a goroutine so it doesn't block the HTTP server below
 	go startTCPServer(hub)
 
-	// 3. Configure the HTTP Route for WebSockets
+	// config endpoint
+	http.HandleFunc("/api/config", handleConfig)
+
+	// configure the HTTP route for websockets
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		handleWebSocket(hub, w, r)
 	})
 
-	// 4. Start the HTTP Server (User Connections)
-	// This blocks the main thread forever (keeping the program alive)
+	// start the HTTP Server (User Connections)
+	// this blocks the main thread forever (keeping the program alive)
 	fmt.Println(" -> TCP Listening on :9000 (Game Engine)")
 	fmt.Println(" -> HTTP Listening on :8080 (Web Clients)")
 

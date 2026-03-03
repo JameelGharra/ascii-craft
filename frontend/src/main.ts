@@ -4,11 +4,22 @@ import { BinaryReader, FLAG_IS_COMPRESSED, FLAG_IS_DELTA, FLAG_METHOD, SHIFT_TAB
 import { Renderer } from "./renderer";
 
 
-const WIDTH = 212;
-const HEIGHT = 66;
-const TOTAL_PIXELS = WIDTH * HEIGHT;
-const MAX_CHAT_MESSAGES = 35; // would delete the early ones in the queue, set to 35 to have some scroll
-const COOLDOWN_MS = 500; // cooldown for sending commands to prevent spamming
+interface AppConfig {
+    video: {
+        width: number;
+        height: number;
+    };
+    chat: {
+        cooldown_ms: number; // cooldown to prevent spamming cmds
+        max_messages: number; // deletes early ones in the queue, I set usually to 35 to have some scroll sense
+    };
+    commands: {
+        standard: string[];
+        parameterized: {
+            [key: string]: { min: number; max: number };
+        };
+    };
+}
 
 class GameClient {
     private ws: WebSocket | null = null;
@@ -26,13 +37,21 @@ class GameClient {
     private chatLog: HTMLDivElement;
     private chatInput: HTMLInputElement;
     private statusEl: HTMLDivElement;
+
+    // config injected from server
+    private config: AppConfig;
+    private totalPixels: number;
+    private standardCommandSet: Set<string>;
     
 
-    constructor(canvasId: string) {
+    constructor(config: AppConfig, canvasId: string) {
+        this.config = config
+        this.totalPixels = config.video.width * config.video.height;
+        this.standardCommandSet = new Set(config.commands.standard);
         const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-        this.renderer = new Renderer(canvas, WIDTH, HEIGHT);
-        this.prevFrame = new Uint8Array(TOTAL_PIXELS);
-        this.currFrame = new Uint8Array(TOTAL_PIXELS);
+        this.renderer = new Renderer(canvas, this.config.video.width, this.config.video.height);
+        this.prevFrame = new Uint8Array(this.totalPixels);
+        this.currFrame = new Uint8Array(this.totalPixels);
         this.huffman = new HuffmanDecoder();
         this.lastSeq = -1;
         this.chatLog = document.getElementById("chat-log") as HTMLDivElement;
@@ -62,17 +81,34 @@ class GameClient {
         }
     }
 
+    private isValidCommand(cmd: string): boolean {
+        for (const [prefix, bounds] of Object.entries(this.config.commands.parameterized)) {
+            if(cmd.startsWith(prefix + " ")) {
+                const parts = cmd.split(" ");
+                if(parts.length === 2) {
+                    const val = parseInt(parts[1], 10);
+                    return !isNaN(val) && val >= bounds.min && val <= bounds.max;
+                }
+            }
+        }
+        return this.standardCommandSet.has(cmd);
+    }
+
     private setupInputListener() {
         this.chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 if(this.isOnCooldown) {
                     return;
                 }
-                const msg = this.chatInput.value.trim();
+                const msg = this.chatInput.value.trim().toLowerCase();
                 if (msg) {
-                    this.sendCommand(msg);
+                    if(this.isValidCommand(msg)) {
+                        this.sendCommand(msg);
+                        this.triggerCooldown();
+                    } else {
+                        this.appendChat("System", `Invalid command: ${msg}`, "system");
+                    }
                     this.chatInput.value = ''; // clear input
-                    this.triggerCooldown();
                 }
             }
         });
@@ -87,7 +123,7 @@ class GameClient {
             this.chatInput.disabled = false;
             this.chatInput.placeholder = "Type command and press Enter...";
             this.chatInput.focus();
-        }, COOLDOWN_MS);
+        }, this.config.chat.cooldown_ms);
     }
 
     private appendChat(sender: string, message: string, cssClass: string) {
@@ -95,7 +131,7 @@ class GameClient {
         el.className = "chat-msg";
         el.innerHTML = `<span class="${cssClass}">${sender}:</span> <span class="msg-text">${this.escapeHtml(message)}</span>`;
         this.chatLog.appendChild(el);
-        while (this.chatLog.childElementCount > MAX_CHAT_MESSAGES) {
+        while (this.chatLog.childElementCount > this.config.chat.max_messages) {
             this.chatLog.removeChild(this.chatLog.firstChild!);
         }
         this.chatLog.scrollTop = this.chatLog.scrollHeight; // auto scroll
@@ -175,7 +211,7 @@ class GameClient {
             this.currFrame.set(payload);
         }
         if(isDelta) {
-            for(let i = 0; i < TOTAL_PIXELS; i++) {
+            for(let i = 0; i < this.totalPixels; i++) {
                 this.currFrame[i] = this.prevFrame[i] ^ this.currFrame[i];
             }
         }
@@ -184,5 +220,17 @@ class GameClient {
     }
 }
 
-const client = new GameClient('gameCanvas');
-client.connect("ws://localhost:8080/ws");
+async function initApp() {
+    try {
+        const response = await fetch('http://localhost:8080/api/config');
+        const config: AppConfig = await response.json();
+        const client = new GameClient(config, 'gameCanvas');
+        client.connect("ws://localhost:8080/ws");
+    } catch(err) {
+        console.error("Failed to load game config:", err);
+        const statusEl = document.getElementById("status");
+        if(statusEl) statusEl.innerText = "Failed to load config, server might not be running..";
+    }
+}
+
+initApp();

@@ -205,12 +205,19 @@ class GameClient {
         const seq = reader.readVarint();
         const dataLen = reader.readVarint(); // have no usage for it atm, since it is at the end anyway
         console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
-        if(this.lastSeq !== -1 && seq <= this.lastSeq) {
-            return ; // older packet sent (pretty rare, but why not)
+        if(this.lastSeq !== -1) {
+            if(seq === this.lastSeq) {
+                return; // duplicate, honestly dont think it will happen
+            }
+            if(seq < this.lastSeq) {
+                this.hasReceivedKeyFrame = false;
+            }
+            else if(seq > this.lastSeq + 1) {
+                console.warn(`Dropped frame(s) detected! Jumped from ${this.lastSeq} to ${seq}. Waiting for I-Frame.`);
+                this.hasReceivedKeyFrame = false; 
+            }
         }
-        if(this.lastSeq !== -1 && seq > this.lastSeq + 1) {
-            this.hasReceivedKeyFrame = false;
-        }
+        
         this.lastSeq = seq;
 
         if(isDelta && !this.hasReceivedKeyFrame) {

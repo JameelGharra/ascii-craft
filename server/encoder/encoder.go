@@ -133,11 +133,11 @@ func (e *Encoder) WriteTo(pb *protocol.PacketBuilder) error {
 	if frame.Encoding != NONE {
 		flags |= FlagIsCompressed
 	}
-	if !frame.IsKeyFrame { // force refresh or the very first frame
+	if !frame.IsKeyFrame && frame.Encoding != NONE { // force refresh or the very first frame
 		flags |= FlagIsDelta
 	}
 	switch frame.Encoding {
-	case XOR_HUFFMAN:
+	case XOR_HUFFMAN, HUFFMAN:
 		flags |= FlagMethod
 		if frame.Huff == nil {
 			return ErrHuffmanNotPerformed

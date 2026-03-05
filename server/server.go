@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -12,187 +12,281 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JameelGharra/ascii-craft/server/ascii"
+	"github.com/JameelGharra/ascii-craft/server/encoder"
+	"github.com/JameelGharra/ascii-craft/server/protocol"
+	"github.com/JameelGharra/ascii-craft/server/utils"
+
 	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
 
-// Path to your compiled C binary
-const BinaryPath = "../game/craft.exe"
-const Port = ":9000"
+const (
+	TotalFrames    = 10000
+	BinaryPath     = "../game/craft.exe"
+	Stride         = 1
+	RefreshRate    = 120 // after how much frames to send key frame (i-frame)
+	BotMode        = 0   // rng based cmds
+	ControlledMode = 1
+)
+
+var commandMap = map[string]uint32{
+	"!w":            ipc.CmdForward,
+	"!s":            ipc.CmdBackward,
+	"!a":            ipc.CmdLeft,
+	"!d":            ipc.CmdRight,
+	"!jump":         ipc.CmdJump,
+	"!fly":          ipc.CmdFly,
+	"!build":        ipc.CmdBuild,
+	"!destroy":      ipc.CmdDestroy,
+	"!turnleft":     ipc.CmdTurnLeft,
+	"!turnright":    ipc.CmdTurnRight,
+	"!lookup":       ipc.CmdLookUp,
+	"!lookdown":     ipc.CmdLookDown,
+	"!jumpforward":  ipc.CmdJumpForward,
+	"!jumpbackward": ipc.CmdJumpBackward,
+	"!jumpleft":     ipc.CmdJumpLeft,
+	"!jumpright":    ipc.CmdJumpRight,
+}
 
 func main() {
-	absPath, _ := filepath.Abs(BinaryPath)
+	absPath, err := filepath.Abs(BinaryPath)
+	if err != nil {
+		fmt.Printf("Failed to get absolute path of game binary: %v\n", err)
+		return
+	}
+
 	cmd := exec.Command(absPath)
-	cmd.Dir = filepath.Dir(absPath) // for texture etc..
-	cmd.Stdout = nil                // not using it anyway
+	cmd.Dir = filepath.Dir(absPath)
+	// cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	fmt.Println("Launching the C engine...")
 	if err := cmd.Start(); err != nil {
-		log.Fatalf("Failed to start game: %v", err)
+		fmt.Printf("Failed to start game: %v\n", err)
+		return
 	}
-	defer func() {
-		cmd.Process.Kill()
-		fmt.Println("\nGame stopped.")
+
+	processDone := make(chan error, 1) // just to signal any process exit like game crash
+	go func() {
+		processDone <- cmd.Wait()
 	}()
 
-	// Retry loop because C takes a moment to alloc SHM
+	fmt.Println("Game launched. Now connecting to IPC...")
+
 	var client *ipc.Client
-	var err error
-	for i := 0; i < 10; i++ {
-		time.Sleep(2000 * time.Millisecond)
+	for range 20 {
+		time.Sleep(100 * time.Millisecond) // wait before retrying (busy wait)
 		client, err = ipc.NewClient()
 		if err == nil {
 			break
 		}
 	}
 	if client == nil {
-		log.Fatalf("Could not connect to IPC: %v", err)
+		fmt.Println("Could not connect to IPC after retries")
+		return
 	}
 	defer client.Close()
-	fmt.Println("Connected to shared mem.")
 
-	go startCommandServer(client)
+	fmt.Printf("Starting benchmark: %d Frames with random commands...\n", TotalFrames)
 
-	fmt.Println("Starting render loop..")
-	time.Sleep(1 * time.Second)
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	possibleCmds := []uint32{
+		ipc.CmdForward, ipc.CmdBackward,
+		ipc.CmdTurnLeft, ipc.CmdTurnRight,
+		ipc.CmdLookUp, ipc.CmdLookDown,
+		ipc.CmdJump, ipc.CmdJumpForward,
+		ipc.CmdSelectSlot,
+	}
 
-	// Clear screen once
-	fmt.Print("\033[2J")
+	var width, height int
+	timeout := time.After(2 * time.Second)
 
-	var buffer []byte
+initLoop:
+	for {
+		select {
+		case err := <-processDone:
+			fmt.Printf("Game process exited prematurely: %v\n", err)
+			return
+		case <-timeout:
+			fmt.Println("Timed out waiting for first frame")
+			return
+		default:
+			f, ok := client.TryReadFrame()
+			if ok {
+				width, height = int(f.Width), int(f.Height)
+				break initLoop
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	var packetInternalBuffer []byte = make([]byte, 1024*1024)
+
+	frameEncoder := encoder.NewEncoder(width*height, Stride)
+	frameEncoder.AddEncoding(encoder.Raw)
+	frameEncoder.AddEncoding(encoder.XorRLE)
+	frameEncoder.AddEncoding(encoder.Huffman)
+
+	coloredFrame := make([]byte, width*height)
+	runMode := ControlledMode
 
 	for {
-		frame, isNew := client.TryReadFrame()
+		// 1. Dial the Relay
+		var conn net.Conn
+		var err error
+		for {
+			conn, err = net.Dial("tcp", "localhost:9000")
+			if err == nil {
+				fmt.Println("Connected to Relay!")
+				break
+			}
+			// Retry every 1s if Relay is down
+			time.Sleep(1 * time.Second)
+		}
+
+		if runMode == ControlledMode {
+			go func(c net.Conn, gc *ipc.Client) {
+				scanner := bufio.NewScanner(c)
+				for scanner.Scan() {
+					cmdStr := scanner.Text()
+					handleRemoteCommand(cmdStr, gc)
+				}
+				if err := scanner.Err(); err != nil {
+					fmt.Printf("Relay connection error: %v\n", err)
+				}
+			}(conn, client)
+		}
+
+		// 2. The Frame Loop (Existing logic)
+		// We moved frameNum loop inside here
+		// Note: You might want to preserve frameNum outside if you want continuity
+		responseVal := loopingForFrames(FrameLooperConfig{
+			numOfFrames:          TotalFrames,
+			gameClient:           client,
+			encoderToUse:         frameEncoder,
+			frameBuffer:          coloredFrame,
+			gameProcessDone:      processDone,
+			rng:                  rng,
+			commands:             possibleCmds,
+			subprocessCmd:        cmd,
+			packetInternalBuffer: packetInternalBuffer,
+			conn:                 conn,
+			refreshAfterFrames:   RefreshRate,
+			runMode:              runMode,
+		})
+
+		// 3. Cleanup before retrying
+		conn.Close()
+		if responseVal {
+			fmt.Println("Finished all game frames. Exiting.")
+			return
+		}
+		fmt.Println("Relay connection lost. Retrying in 2s...")
+		time.Sleep(2 * time.Second)
+	}
+}
+
+type FrameLooperConfig struct {
+	numOfFrames          int
+	gameClient           *ipc.Client
+	encoderToUse         *encoder.Encoder
+	frameBuffer          []byte     // just to keep reusing even on reconnect
+	gameProcessDone      chan error // just passing to get game feedback
+	rng                  *rand.Rand
+	commands             []uint32
+	subprocessCmd        *exec.Cmd
+	packetInternalBuffer []byte
+	conn                 net.Conn
+	refreshAfterFrames   int
+	runMode              int
+}
+
+// if we looped total frames successfully returns true, otherwise false
+// however, a quick note if the game itself crashed or for some reason stopped
+// producing i did not want for a reconnection to happen, it would just end the program
+// to get me noticing that since it should not happen technically and its C game related
+func loopingForFrames(config FrameLooperConfig) bool {
+	lastFrameTime := time.Now()
+	packetBuilder := protocol.NewPacketBuilder(config.packetInternalBuffer)
+	var headerbuff [5]byte
+	var isKeyFrame bool = true
+	for frameNum := 0; frameNum < TotalFrames; {
+		select {
+		case err := <-config.gameProcessDone:
+			fmt.Printf("Game CRASHED at frame %d! Error: %v\n", frameNum, err)
+			return true
+		default:
+		}
+
+		if time.Since(lastFrameTime) > 2*time.Second {
+
+			fmt.Printf("Game stopped producing frames at %d (hang/deadlock detected)\n", frameNum)
+			return true
+		}
+		if config.runMode == BotMode && config.rng.Float64() < 0.05 {
+			cmdType := config.commands[config.rng.Intn(len(config.commands))]
+			var val int32 = 0
+			if cmdType == ipc.CmdSelectSlot {
+				val = int32(config.rng.Intn(10))
+			}
+			config.gameClient.WriteCommand(cmdType, val)
+		}
+
+		frame, isNew := config.gameClient.TryReadFrame()
 		if !isNew {
-			// just to make sure that there is a frame done without busy wait
 			time.Sleep(1 * time.Millisecond)
 			continue
 		}
 
-		renderANSI(frame, &buffer)
-	}
-}
+		lastFrameTime = time.Now()
 
-func startCommandServer(client *ipc.Client) {
-	ln, err := net.Listen("tcp", Port)
-	if err != nil {
-		log.Fatalf("TCP listen error: %v", err)
-	}
-	// log.Printf("Command Server listening on %s", Port)
+		frame.ToColor8bit(config.frameBuffer)
 
-	for {
-		conn, err := ln.Accept()
+		isKeyFrame = frameNum%config.refreshAfterFrames == 0
+		result := config.encoderToUse.PushFrame(config.frameBuffer, isKeyFrame)
+		fmt.Printf("Frame %d: Original=%d bytes, Compressed (Best)=%d bytes - Type: (%v)\n", frameNum, len(config.frameBuffer), result.FinalSize, result.Encoding)
+		packetBuilder.Reset()
+		err := config.encoderToUse.WriteTo(packetBuilder)
 		if err != nil {
-			continue
+			fmt.Printf("Encoding error at frame %d: %v\n", frameNum, err)
+			return true
 		}
-		go handleConnection(conn, client)
+		// just some prefix length framing right here
+		payload := packetBuilder.Bytes()
+		payloadLen := uint32(len(payload))
+		n, _ := utils.PutVarint(headerbuff[:], payloadLen)
+		buffers := net.Buffers{headerbuff[:n], payload}
+		if _, err := buffers.WriteTo(config.conn); err != nil {
+			fmt.Printf("Failed to write frame %d to connection: %v\n", frameNum, err)
+			return false
+		}
+		frameNum++
 	}
+
+	// killed the process to remove noisy output from the game
+	if config.subprocessCmd.ProcessState == nil || !config.subprocessCmd.ProcessState.Exited() {
+		fmt.Println("Stopping game process...")
+		config.subprocessCmd.Process.Kill()
+	}
+	return true
 }
 
-func handleConnection(conn net.Conn, client *ipc.Client) {
-	defer conn.Close()
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		text := strings.TrimSpace(scanner.Text())
-		processCommand(client, text)
-	}
-}
-
-func processCommand(client *ipc.Client, text string) {
-	parts := strings.Fields(text)
-	if len(parts) == 0 {
+func handleRemoteCommand(rawCmd string, gameClient *ipc.Client) {
+	rawCmd = strings.TrimSpace((strings.ToLower(rawCmd)))
+	if rawCmd == "" {
 		return
 	}
-
-	cmd := parts[0]
-	var op uint32 = ipc.CmdNone
-	var val int32 = 0
-
-	switch cmd {
-	// movement
-	case "!forward", "!w":
-		op = ipc.CmdForward
-	case "!back", "!s":
-		op = ipc.CmdBackward
-	case "!left", "!a":
-		op = ipc.CmdLeft
-	case "!right", "!d":
-		op = ipc.CmdRight
-
-	// jumps
-	case "!jumpforward", "!jf":
-		op = ipc.CmdJumpForward
-	case "!jumpbackward", "!jb":
-		op = ipc.CmdJumpBackward
-	case "!jumpleft", "!jl":
-		op = ipc.CmdJumpLeft
-	case "!jumpright", "!jr":
-		op = ipc.CmdJumpRight
-
-	// camera
-	case "!turnleft", "!l":
-		op = ipc.CmdTurnLeft
-	case "!turnright", "!r":
-		op = ipc.CmdTurnRight
-	case "!up", "!lookup":
-		op = ipc.CmdLookUp
-	case "!down", "!lookdown":
-		op = ipc.CmdLookDown
-
-	// actions
-	case "!jump", "!j":
-		op = ipc.CmdJump
-	case "!fly":
-		op = ipc.CmdFly
-	case "!build", "!b":
-		op = ipc.CmdBuild
-	case "!destroy", "!x":
-		op = ipc.CmdDestroy
-
-	// slot selection
-	case "!slot":
-		if len(parts) > 1 {
-			if v, err := strconv.Atoi(parts[1]); err == nil {
-				op = ipc.CmdSelectSlot
-				val = int32(v - 1) // 1-based to 0-based
+	if strings.HasPrefix(rawCmd, "!slot ") {
+		parts := strings.Split(rawCmd, " ")
+		if len(parts) == 2 {
+			val, err := strconv.Atoi(parts[1])
+			if err == nil && val >= ipc.MinSupportedSlotIdx && val <= ipc.MaxSupportedSlotIdx {
+				gameClient.WriteCommand(ipc.CmdSelectSlot, int32(val))
 			}
 		}
+		return
 	}
-
-	if op != ipc.CmdNone {
-		client.WriteCommand(op, val)
+	if cmdType, exists := commandMap[rawCmd]; exists {
+		gameClient.WriteCommand(cmdType, ipc.IgnoredDefaultValue)
+		fmt.Printf("Execute remote command: %s\n", rawCmd)
+	} else {
+		fmt.Printf("Unknown command received: %s\n", rawCmd)
 	}
-}
-
-func renderANSI(frame *ascii.Frame, buffer *[]byte) {
-	// Reset buffer
-	*buffer = (*buffer)[:0]
-
-	// Move cursor to top-left (0,0)
-	*buffer = append(*buffer, "\033[H"...)
-
-	width := int(frame.Width)
-	height := int(frame.Height)
-	pixels := frame.Pixels
-
-	var lastR, lastG, lastB uint8 = 255, 255, 255 // force initial set
-
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			idx := y*width + x
-			p := pixels[idx]
-
-			// same concept as last_color, only on change
-			if p.R != lastR || p.G != lastG || p.B != lastB {
-				// ANSI TrueColor: \033[38;2;R;G;Bm
-				*buffer = append(*buffer, fmt.Sprintf("\033[38;2;%d;%d;%dm", p.R, p.G, p.B)...)
-				lastR, lastG, lastB = p.R, p.G, p.B
-			}
-			*buffer = append(*buffer, p.CharCode)
-		}
-		*buffer = append(*buffer, '\n')
-	}
-
-	os.Stdout.Write(*buffer)
 }

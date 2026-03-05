@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	TotalFrames = 10000
+	TotalFrames = 1000000
 	Stride      = 1
 )
 

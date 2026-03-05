@@ -1,1 +1,3 @@
 game/deps/** linguist-vendored=true
+game/shaders/** linguist-vendored=true
+game/textures/** linguist-vendored=true

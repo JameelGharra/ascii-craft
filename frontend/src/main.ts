@@ -21,6 +21,13 @@ interface AppConfig {
     };
 }
 
+function isValidAppConfig(data: any): data is AppConfig {
+    return data
+        && data.video && typeof data.video.width === 'number'
+        && data.chat && typeof data.chat.cooldown_ms === 'number'
+        && data.commands && Array.isArray(data.commands.standard);
+}
+
 class GameClient {
     private ws: WebSocket | null = null;
     private renderer: Renderer;
@@ -42,6 +49,11 @@ class GameClient {
     private config: AppConfig;
     private totalPixels: number;
     private standardCommandSet: Set<string>;
+
+    // reconnect state for ws
+    private wsUrl: string = "";
+    private reconnectAttempts = 0;
+    private readonly MAX_RECONNECT_DELAY_MS = 10000;
     
 
     constructor(config: AppConfig, canvasId: string) {
@@ -61,24 +73,46 @@ class GameClient {
     }
 
     public connect(url: string) {
-       this.ws = new WebSocket(url);
-        this.ws.binaryType = "arraybuffer";
-
-        this.ws.onopen = () => {
-            console.log("Connected to relay");
-            if(this.statusEl) this.statusEl.innerText = "Connected";
-        }
-        this.ws.onclose = () => {
-            console.log("Disconnected");
-            if(this.statusEl) this.statusEl.innerText = "Disconnected";
-        }
-        this.ws.onmessage = (e) => {
-            if(typeof e.data === "string") {
-                this.handleChatMessage(e.data);
-            } else if(e.data instanceof ArrayBuffer) {
-                this.handlePacket(e.data);
+        this.wsUrl = url;
+        try {
+            this.ws = new WebSocket(url);
+            this.ws.binaryType = "arraybuffer";
+            this.ws.onopen = () => {
+                console.log("Connected to relay");
+                if(this.statusEl) this.statusEl.innerText = "Connected";
+                this.reconnectAttempts = 0;
+                this.lastSeq = -1;
+                this.hasReceivedKeyFrame = false;
             }
+            this.ws.onclose = () => {
+                console.log("Disconnected");
+                if(this.statusEl) this.statusEl.innerText = "Disconnected";
+                this.scheduleReconnect();
+            }
+            this.ws.onmessage = (e) => {
+                if(typeof e.data === "string") {
+                    this.handleChatMessage(e.data);
+                } else if(e.data instanceof ArrayBuffer) {
+                    this.handlePacket(e.data);
+                }
+            }
+        } catch(err) {
+            console.error("Websocket construction failed: ", err);
+            this.scheduleReconnect();
         }
+    }
+
+    // for ws, having delay with 1.5 as multipler and 10 secs cap
+    private scheduleReconnect() {
+        const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.MAX_RECONNECT_DELAY_MS);
+        this.reconnectAttempts++;
+        if(this.statusEl) {
+            this.statusEl.innerText = `Reconnecting in ${Math.round(delay/1000)}s...`;
+        }
+        this.appendChat("System", `Connection lost. Retrying in ${Math.round(delay/1000)}s...`, "system");
+        setTimeout(() => {
+            this.connect(this.wsUrl);
+        }, delay);
     }
 
     private isValidCommand(cmd: string): boolean {
@@ -220,16 +254,38 @@ class GameClient {
     }
 }
 
+async function fetchConfigWithRetry(url: string, maxRetries: number = 10, delayMs: number = 2000): Promise<AppConfig> {
+    const statusEl = document.getElementById("status");
+    for(let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url);
+            if(!response.ok) throw new Error(`HTTP error status: ${response.status}`);
+            const data = await response.json();
+            if(!isValidAppConfig(data)) {
+                throw new Error("Invalid config format from server");
+            }
+            if(statusEl) statusEl.innerText = "Config loaded, connecting...";
+            return data;
+        } catch(err) {
+            console.warn(`Config fetch attempt ${attempt} failed:`, err);
+            if(statusEl) statusEl.innerText = `Waiting for server... (Attempt ${attempt}/${maxRetries})`;
+            if(attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+        }
+    }
+    throw new Error("Could not reach to server to fetch configuration.");
+}
+
 async function initApp() {
     try {
-        const response = await fetch('http://localhost:8080/api/config');
-        const config: AppConfig = await response.json();
+        const config = await fetchConfigWithRetry('http://localhost:8080/api/config');
         const client = new GameClient(config, 'gameCanvas');
         client.connect("ws://localhost:8080/ws");
     } catch(err) {
-        console.error("Failed to load game config:", err);
+        console.error("Initialization failed:", err);
         const statusEl = document.getElementById("status");
-        if(statusEl) statusEl.innerText = "Failed to load config, server might not be running..";
+        if(statusEl) statusEl.innerText = "Failed to initialize game. Please refresh later.";
     }
 }
 

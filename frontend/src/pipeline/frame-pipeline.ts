@@ -28,68 +28,73 @@ export class FramePipeline {
     }
 
     public handlePacket(rawBuffer: ArrayBuffer) {
-        const reader = new BinaryReader(rawBuffer);
+        try {
+            const reader = new BinaryReader(rawBuffer);
 
-        const flags = reader.readByte();
-        const isCompressed = (flags & FLAG_IS_COMPRESSED) !== 0;
-        const isHuffman = (flags & FLAG_METHOD) !== 0;
-        const isDelta = (flags & FLAG_IS_DELTA) !== 0;
-        const tableMode = (flags & MASK_TABLE_MODE) >> SHIFT_TABLE_MODE;
+            const flags = reader.readByte();
+            const isCompressed = (flags & FLAG_IS_COMPRESSED) !== 0;
+            const isHuffman = (flags & FLAG_METHOD) !== 0;
+            const isDelta = (flags & FLAG_IS_DELTA) !== 0;
+            const tableMode = (flags & MASK_TABLE_MODE) >> SHIFT_TABLE_MODE;
 
-        const seq = reader.readVarint();
-        const dataLen = reader.readVarint(); 
-        
-        console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
-        
-        if (this.lastSeq !== -1) {
-            if (seq === this.lastSeq) return;
+            const seq = reader.readVarint();
+            const dataLen = reader.readVarint(); 
             
-            if (seq < this.lastSeq) {
-                this.hasReceivedKeyFrame = false;
-            } else if (seq > this.lastSeq + 1) {
-                console.warn(`Dropped frame(s) detected! Jumped from ${this.lastSeq} to ${seq}. Waiting for I-Frame.`);
-                this.hasReceivedKeyFrame = false; 
+            console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
+            
+            if (this.lastSeq !== -1) {
+                if (seq === this.lastSeq) return;
+                
+                if (seq < this.lastSeq) {
+                    this.hasReceivedKeyFrame = false;
+                } else if (seq > this.lastSeq + 1) {
+                    console.warn(`Dropped frame(s) detected! Jumped from ${this.lastSeq} to ${seq}. Waiting for I-Frame.`);
+                    this.hasReceivedKeyFrame = false; 
+                }
             }
-        }
-        
-        this.lastSeq = seq;
+            
+            this.lastSeq = seq;
 
-        if (isDelta && !this.hasReceivedKeyFrame) {
-            return; 
-        }
-        
-        if (!isDelta) {
-            this.hasReceivedKeyFrame = true;
-        }
+            if (isDelta && !this.hasReceivedKeyFrame) {
+                return; 
+            }
+            
+            if (!isDelta) {
+                this.hasReceivedKeyFrame = true;
+            }
 
-        if (isCompressed && isHuffman) {
-            let tableData: Uint8Array;
-            if (tableMode === TABLE_MODE_RAW) {
-                tableData = reader.readSlice(256);
+            if (isCompressed && isHuffman) {
+                let tableData: Uint8Array;
+                if (tableMode === TABLE_MODE_RAW) {
+                    tableData = reader.readSlice(256);
+                } else {
+                    const tableLen = reader.readByte();
+                    tableData = reader.readSlice(tableLen);
+                }
+
+                this.huffman.decodeTable(tableMode, tableData);
+                const payload = reader.readRemaining();
+                this.huffman.decodeStream(payload, this.currFrame);
+
+            } else if (isCompressed) { 
+                const payload = reader.readRemaining();
+                decodeRLE(payload, this.currFrame);
             } else {
-                const tableLen = reader.readByte();
-                tableData = reader.readSlice(tableLen);
+                const payload = reader.readRemaining();
+                this.currFrame.set(payload);
             }
 
-            this.huffman.decodeTable(tableMode, tableData);
-            const payload = reader.readRemaining();
-            this.huffman.decodeStream(payload, this.currFrame);
-
-        } else if (isCompressed) { 
-            const payload = reader.readRemaining();
-            decodeRLE(payload, this.currFrame);
-        } else {
-            const payload = reader.readRemaining();
-            this.currFrame.set(payload);
-        }
-
-        if (isDelta) {
-            for (let i = 0; i < this.totalPixels; i++) {
-                this.currFrame[i] = this.prevFrame[i] ^ this.currFrame[i];
+            if (isDelta) {
+                for (let i = 0; i < this.totalPixels; i++) {
+                    this.currFrame[i] = this.prevFrame[i] ^ this.currFrame[i];
+                }
             }
-        }
 
-        this.renderer.render(this.currFrame);
-        this.prevFrame.set(this.currFrame);
+            this.renderer.render(this.currFrame);
+            this.prevFrame.set(this.currFrame);
+        } catch(err) {
+            console.error("Frame pipeline encountered a decoding error:", err);
+            this.hasReceivedKeyFrame = false;
+        }
     }
 }

@@ -20,9 +20,9 @@ export class Renderer {
             const color8 = buffer8Bit[i];
 
             // I gave 3 bits for red, green and just 2 for blues in Go side
-            const r = ((color8 >> 5) & 0x07) * 36 // 255/7
-            const g = ((color8 >> 2) & 0x07) * 36
-            const b = (color8 & 0x03) * 85 // 255/3
+            const r = Math.floor((((color8 >> 5) & 0x07) * 255) / 7);
+            const g = Math.floor((((color8 >> 2) & 0x07) * 255) / 7);
+            const b = Math.floor(((color8 & 0x03) * 255) / 3);
 
             this.buf32[i] = (0xFF << 24) | (b << 16) | (g << 8) | r;
         }

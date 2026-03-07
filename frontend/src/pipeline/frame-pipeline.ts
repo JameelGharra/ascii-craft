@@ -26,7 +26,7 @@ export class FramePipeline {
         this.lastSeq = -1;
         this.hasReceivedKeyFrame = false;
     }
-
+    
     public handlePacket(rawBuffer: ArrayBuffer) {
         try {
             const reader = new BinaryReader(rawBuffer);
@@ -73,14 +73,19 @@ export class FramePipeline {
                 }
 
                 this.huffman.decodeTable(tableMode, tableData);
-                const payload = reader.readRemaining();
-                this.huffman.decodeStream(payload, this.currFrame);
+            }
 
+            const payload = reader.readRemaining();
+            if (payload.length !== dataLen) {
+                throw new Error(`Packet corruption: declared dataLen was ${dataLen} but payload has ${payload.length} bytes.`);
+            }
+                
+
+            if (isCompressed && isHuffman) {
+                this.huffman.decodeStream(payload, this.currFrame);
             } else if (isCompressed) { 
-                const payload = reader.readRemaining();
                 decodeRLE(payload, this.currFrame);
             } else {
-                const payload = reader.readRemaining();
                 this.currFrame.set(payload);
             }
 

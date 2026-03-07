@@ -3,6 +3,7 @@ export class ConnectionManager {
     private wsUrl: string = "";
     private reconnectAttempts = 0;
     private readonly MAX_RECONNECT_DELAY_MS = 10000;
+    private reconnectTimer: number | null = null; // just to track the timer
 
     // callbacks for the orchestrator to listen to
     public onConnect?: () => void;
@@ -10,8 +11,13 @@ export class ConnectionManager {
     public onReconnectAttempt?: (delayMs: number) => void;
     public onMessage?: (msg: string) => void;
     public onPacket?: (buffer: ArrayBuffer) => void;
+    public onError?: (err: Event) => void;
 
     public connect(url: string) {
+        if (this.reconnectTimer !== null) { // just allowing one timer to exist no parallelism
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         this.wsUrl = url;
         try {
             this.ws = new WebSocket(url);
@@ -27,6 +33,11 @@ export class ConnectionManager {
                 console.log("Disconnected");
                 this.onDisconnect?.();
                 this.scheduleReconnect();
+            };
+
+            this.ws.onerror = (err) => {
+                console.error("Websocket Error:", err);
+                this.onError?.(err);
             };
             
             this.ws.onmessage = (e) => {
@@ -49,12 +60,16 @@ export class ConnectionManager {
     }
 
     private scheduleReconnect() {
+        if (this.reconnectTimer !== null) {
+            clearTimeout(this.reconnectTimer);
+        }
         const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.MAX_RECONNECT_DELAY_MS);
         this.reconnectAttempts++;
         
         this.onReconnectAttempt?.(delay);
         
-        setTimeout(() => {
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = null; // just to make sure that the logic syncs in connect
             this.connect(this.wsUrl);
         }, delay);
     }

@@ -18,23 +18,25 @@ export class ChatUI {
     public appendChat(sender: string, message: string, cssClass: string) {
         const el = document.createElement("div");
         el.className = "chat-msg";
-        // note XSS vulnerability from feedback remains here for now
-        el.innerHTML = `<span class="${cssClass}">${sender}:</span> <span class="msg-text">${this.escapeHtml(message)}</span>`;
+
+        const senderSpan = document.createElement("span");
+        senderSpan.className = cssClass; 
+        senderSpan.textContent = `${sender}: `;
+
+        const msgSpan = document.createElement("span");
+        msgSpan.className = "msg-text";
+        msgSpan.textContent = message;
+
+        el.appendChild(senderSpan);
+        el.appendChild(msgSpan);
         
         this.chatLog.appendChild(el);
         
         while (this.chatLog.childElementCount > this.maxMessages) {
             this.chatLog.removeChild(this.chatLog.firstChild!);
         }
+        
+        // bottom auto-scroll 
         this.chatLog.scrollTop = this.chatLog.scrollHeight;
-    }
-
-    private escapeHtml(unsafe: string) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
     }
 }

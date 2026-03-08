@@ -7,6 +7,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	viewerTickerInterval = 2 * time.Second
+	voteTickerInterval   = 500 * time.Millisecond
+	commandBufferSize    = 256
+	gameCmdsBufferSize   = 10
+)
+
 type Client struct {
 	hub       *Hub
 	conn      *websocket.Conn
@@ -35,14 +42,18 @@ func NewHub() *Hub {
 		broadcast:  make(chan []byte),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		commands:   make(chan clientCommand, 256),
-		gameCmds:   make(chan string, 10),
+		commands:   make(chan clientCommand, commandBufferSize),
+		gameCmds:   make(chan string, gameCmdsBufferSize),
 	}
 }
 
 func (h *Hub) Run() {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+
+	viewerTicker := time.NewTicker(viewerTickerInterval)
+	defer viewerTicker.Stop()
+
+	voteTicker := time.NewTicker(voteTickerInterval)
+	defer voteTicker.Stop()
 	votes := make(map[*Client]string)
 
 	for {
@@ -73,7 +84,15 @@ func (h *Hub) Run() {
 			if _, alreadyVoted := votes[cmdClient.client]; !alreadyVoted {
 				votes[cmdClient.client] = cmdClient.cmd
 			}
-		case <-ticker.C:
+		case <-viewerTicker.C:
+			viewerMsg := fmt.Sprintf(`{"type":"viewers", "count":%d}`, len(h.clients))
+			for client := range h.clients {
+				select {
+				case client.sendText <- viewerMsg:
+				default:
+				}
+			}
+		case <-voteTicker.C:
 			if len(votes) > 0 {
 				tally := make(map[string]int)
 				for _, cmd := range votes {
@@ -88,7 +107,8 @@ func (h *Hub) Run() {
 					}
 				}
 				votes = make(map[*Client]string)
-				announcement := fmt.Sprintf("Majority voted for %s (%d votes)", winner, maxVotes)
+				announcement := fmt.Sprintf(`{"type":"vote", "command":"%s", "votes":%d}`, winner, maxVotes)
+
 				for client := range h.clients {
 					select {
 					case client.sendText <- announcement:

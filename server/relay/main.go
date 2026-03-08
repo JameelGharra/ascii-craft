@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -38,6 +39,24 @@ func readPump(c *Client) {
 			break
 		}
 		if msgType == websocket.TextMessage {
+			// ping-pong RTT (the ping from client side btw)
+			if len(msg) > 0 && msg[0] == '{' {
+				var ping struct {
+					Type string  `json:"type"`
+					T    float64 `json:"t"` // float64 just to keep high res same as js but i might avoid it
+				}
+
+				if err := json.Unmarshal(msg, &ping); err == nil && ping.Type == "ping" {
+					pongMsg := fmt.Sprintf(`{"type":"pong","t":%f}`, ping.T)
+					select {
+					case c.sendText <- pongMsg:
+					default:
+					}
+					continue
+				}
+			}
+
+			// chats/cmds
 			text := strings.TrimSpace(string(msg))
 			if len(text) > 0 && len(text) <= maxMessageSize {
 				c.hub.commands <- clientCommand{client: c, cmd: text}

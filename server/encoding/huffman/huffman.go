@@ -7,7 +7,14 @@ import (
 	"github.com/JameelGharra/ascii-craft/server/utils"
 )
 
-const MinimumAllowingHuffmanChars = 2
+const (
+	// adapting canonical atm
+	TableModeRaw                byte = tableModeRaw
+	TableModeRLE                byte = tableModeRLE
+	TableModeSparse             byte = tableModeSparse
+	TableRawSize                     = canonicalTableRawSize
+	MinimumAllowingHuffmanChars      = 2 // not really used since hybrid approach
+)
 
 var (
 	ErrHuffmanValueNotFound       = errors.New("huffman value not found in encode table")

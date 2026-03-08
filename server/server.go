@@ -19,6 +19,9 @@ import (
 	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
 
+// producing the protocol constants before running
+//go:generate go run tools/gen_protocol/main.go
+
 const (
 	TotalFrames    = 10000
 	BinaryPath     = "../game/craft.exe"

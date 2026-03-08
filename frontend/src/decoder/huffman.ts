@@ -134,8 +134,10 @@ export class HuffmanDecoder {
 
             // Traverse Tree
             if (bit === 0) {
+                if(!node.left) throw new Error("Huffman Decode Error: reached deadend on left branch.");
                 node = node.left!; // The tree is complete for the data, ! is safe
             } else {
+                if(!node.right) throw new Error("Huffman Decode Error: reached deadend on right branch.");
                 node = node.right!;
             }
 

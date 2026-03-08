@@ -4,6 +4,19 @@ import { ChatUI } from "./ui/chat-ui";
 import { InputController } from "./ui/input-controller";
 import { FramePipeline } from "./pipeline/frame-pipeline";
 
+const urlConfig = {
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+    wsBaseUrl: import.meta.env.VITE_WS_BASE_URL,
+};
+
+function checkUrlConfig() {
+    if (!urlConfig.apiBaseUrl || !urlConfig.wsBaseUrl) {
+        throw new Error(
+            "Missing required environment variables. Check your .env file."
+        );
+    }
+}
+
 async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000): Promise<AppConfig> {
     const statusEl = document.getElementById("status");
     for(let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -28,7 +41,7 @@ async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000
 
 async function initApp() {
     try {
-        const config = await fetchConfigWithRetry('http://localhost:8080/api/config');
+        const config = await fetchConfigWithRetry(`${urlConfig.apiBaseUrl}/api/config`);
         const chatUI = new ChatUI(config.chat.max_messages);
         const inputController = new InputController(config);
         const framePipeline = new FramePipeline('gameCanvas', config.video.width, config.video.height);
@@ -66,7 +79,7 @@ async function initApp() {
             chatUI.appendChat("System", `Invalid command: ${cmd}`, "system");
         };
 
-        connectionManager.connect("ws://localhost:8080/ws");
+        connectionManager.connect(`${urlConfig.wsBaseUrl}/ws`);
 
     } catch(err) {
         console.error("Initialization failed:", err);
@@ -75,4 +88,5 @@ async function initApp() {
     }
 }
 
+checkUrlConfig();
 initApp();

@@ -3,6 +3,9 @@ import { ConnectionManager } from "./network/connection-manager";
 import { ChatUI } from "./ui/chat-ui";
 import { InputController } from "./ui/input-controller";
 import { FramePipeline } from "./pipeline/frame-pipeline";
+import { MetricsCollector } from "./metrics/metrics-collector";
+import { LatencyTracker } from "./metrics/latency-tracker";
+import { MessageRouter } from "./network/message-router";
 
 const urlConfig = {
     apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
@@ -42,19 +45,42 @@ async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000
 async function initApp() {
     try {
         const config = await fetchConfigWithRetry(`${urlConfig.apiBaseUrl}/api/config`);
+        const connectionManager = new ConnectionManager();
+        
         const chatUI = new ChatUI(config.chat.max_messages);
         const inputController = new InputController(config);
-        const framePipeline = new FramePipeline('gameCanvas', config.video.width, config.video.height);
-        const connectionManager = new ConnectionManager();
+        
+        const metrics = new MetricsCollector(config.video.width, config.video.height);
+        const latencyTracker = new LatencyTracker(connectionManager);
+        const messageRouter = new MessageRouter();
 
-        // events setup
+        const framePipeline = new FramePipeline('gameCanvas', config.video.width, config.video.height, metrics);
+
+
+        // routing events
+        messageRouter.onVote = (event) => {
+            chatUI.appendChat("Server", `Majority voted for ${event.command} (${event.votes} votes)`, "server");
+        };
+        messageRouter.onViewers = (count) => {
+            metrics.setViewersCount(count);  
+        };
+        messageRouter.onPong = (originalTime) => {
+            latencyTracker.handlePong(originalTime);
+        };
+        messageRouter.onSystemMessage = (msg) => {
+            chatUI.appendChat("System", msg, "system");
+        }
+
+        // connection events
         connectionManager.onConnect = () => {
             chatUI.updateStatus("Connected");
             framePipeline.resetSyncState(); // Resync frames on fresh connect
+            latencyTracker.start();
         };
         
         connectionManager.onDisconnect = () => {
             chatUI.updateStatus("Disconnected");
+            latencyTracker.stop();
         };
         
         connectionManager.onReconnectAttempt = (delayMs) => {
@@ -63,13 +89,14 @@ async function initApp() {
         };
 
         connectionManager.onMessage = (msg) => {
-            chatUI.appendChat("Server", msg, "server");
+            messageRouter.handleMessage(msg);
         };
 
         connectionManager.onPacket = (buffer) => {
             framePipeline.handlePacket(buffer);
         };
 
+        // input events
         inputController.onValidCommand = (cmd) => {
             connectionManager.send(cmd);
             chatUI.appendChat("You", cmd, "user");
@@ -79,6 +106,14 @@ async function initApp() {
             chatUI.appendChat("System", `Invalid command: ${cmd}`, "system");
         };
 
+        // for debug will be removed later on
+        setInterval(() => {
+            if (connectionManager['ws']?.readyState === WebSocket.OPEN) {
+                const stats = metrics.getSnapshot();
+                console.log(`[METRICS] FPS: ${stats.fps} | BW: ${stats.bandwidthKbps.toFixed(2)} KB/s | Comp: ${stats.compressionRatio.toFixed(1)}% | Ping: ${latencyTracker.getLatency().toFixed(1)}ms | Viewers: ${stats.viewers}`);
+            }
+        }, 2000);
+        //
         connectionManager.connect(`${urlConfig.wsBaseUrl}/ws`);
 
     } catch(err) {

@@ -3,25 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASCII Craft - All on One</title>
-    <link rel="stylesheet" href="/src/style.css"> 
+    <title>CRAFT-1 // Telemetry Terminal</title>
+    <!-- fixes the favicon 404 error -->
+    <link rel="icon" href="data:,">
+    
+    <!-- Load a beautiful monospace font for the terminal look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
 
-<div id="container">
-    <div id="game-view">
-        <canvas id="gameCanvas" width="212" height="66"></canvas>
-        <div id="status">Status: Disconnected</div>
-    </div>
-    
-    <div id="chat-view">
-        <div id="chat-log">
-            <div class="chat-msg"><span class="system">System: </span><span class="msg-text">Welcome to ASCII Craft! Type !w, !a, !s, !d, !jump, !turnleft, etc.</span></div>
+<div id="app-grid">
+    <!-- Top Status Bar -->
+    <header id="status-header">
+        <div class="logo">CRAFT-1 // UPLINK</div>
+        <!-- We kept the id="status" so your current TS doesn't break! -->
+        <div id="status">CONNECTING...</div>
+        <div id="resolution-badge">212x66 @ 8-BIT</div>
+    </header>
+
+    <main id="main-content">
+        <!-- Left Side: Game & Timeline -->
+        <div id="game-section">
+            <div class="crt-wrapper">
+                <canvas id="gameCanvas" width="212" height="66"></canvas>
+            </div>
+            <div id="command-timeline">
+                <!-- Phase 4 will inject sliding command chips here -->
+            </div>
         </div>
-        <div id="chat-input-container">
-            <input type="text" id="chat-input" placeholder="Type a command and press Enter..." autocomplete="off">
-        </div>
-    </div>
+
+        <!-- Right Side: Data & Chat -->
+        <aside id="side-panel">
+            <div id="telemetry-panel">
+                <div class="panel-title">═══ TELEMETRY ═══</div>
+                <!-- Phase 4 will inject the live numbers here -->
+                <div id="telemetry-content">
+                    <br/><br/>
+                    <span style="color: #008f11">AWAITING DATA STREAM...</span>
+                </div>
+            </div>
+
+            <div id="chat-container">
+                <div id="chat-log">
+                    <!-- Chat messages go here -->
+                </div>
+                <div id="input-bar">
+                    <span class="prompt-char">&gt;</span>
+                    <input type="text" id="chat-input" placeholder="Enter command (!w, !jump, etc)..." autocomplete="off">
+                </div>
+            </div>
+        </aside>
+    </main>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

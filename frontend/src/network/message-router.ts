@@ -15,12 +15,21 @@ export class MessageRouter {
                 const parsed = JSON.parse(data);
                 switch (parsed.type) {
                     case 'vote':
+                        if (typeof parsed.votes !== 'number' || typeof parsed.command !== 'string') {
+                            throw new Error(`Invalid vote message format: ${data}`);
+                        }
                         this.onVote?.({ command: parsed.command, votes: parsed.votes });
                         break;
                     case 'viewers':
+                        if (typeof parsed.count !== 'number') {
+                            throw new Error(`Invalid viewers message format: ${data}`);
+                        }
                         this.onViewers?.(parsed.count);
                         break;
                     case 'pong':
+                        if (typeof parsed.t !== 'number') {
+                            throw new Error(`Invalid pong message format: ${data}`);
+                        }
                         this.onPong?.(parsed.t);
                         break;
                     default:

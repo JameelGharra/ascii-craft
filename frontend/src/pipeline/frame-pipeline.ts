@@ -14,6 +14,19 @@ export class FramePipeline {
     private totalPixels: number;
     private lastSeq: number = -1;
     private hasReceivedKeyFrame = false;
+    private pendingRender: boolean = false;
+
+
+    private setupRenderingLoop() {
+        const renderLoop = () => {
+            if (this.pendingRender) {
+                this.renderer.render(this.currFrame);
+                this.pendingRender = false;
+            }
+            requestAnimationFrame(renderLoop);
+        };
+        requestAnimationFrame(renderLoop);
+    }
 
     constructor(canvasId: string, width: number, height: number, metrics: MetricsCollector) {
         this.totalPixels = width * height;
@@ -23,6 +36,7 @@ export class FramePipeline {
         this.prevFrame = new Uint8Array(this.totalPixels);
         this.currFrame = new Uint8Array(this.totalPixels);
         this.huffman = new HuffmanDecoder();
+        this.setupRenderingLoop();
     }
 
     public resetSyncState() {
@@ -98,7 +112,7 @@ export class FramePipeline {
                 }
             }
 
-            this.renderer.render(this.currFrame);
+            this.pendingRender = true;
             this.prevFrame.set(this.currFrame);
             let methodStr = "RAW";
             if (isCompressed) {

@@ -29,6 +29,7 @@ const (
 	RefreshRate    = 120 // after how much frames to send key frame (i-frame)
 	BotMode        = 0   // rng based cmds
 	ControlledMode = 1
+	FrameInterval  = time.Second / 60 // capping it so it wont ruin the browser
 )
 
 var commandMap = map[string]uint32{
@@ -210,7 +211,12 @@ func loopingForFrames(config FrameLooperConfig) bool {
 	packetBuilder := protocol.NewPacketBuilder(config.packetInternalBuffer)
 	var headerbuff [5]byte
 	var isKeyFrame bool = true
+
+	fpsTicker := time.NewTicker(FrameInterval)
+	defer fpsTicker.Stop()
+
 	for frameNum := 0; frameNum < TotalFrames; {
+		<-fpsTicker.C
 		select {
 		case err := <-config.gameProcessDone:
 			fmt.Printf("Game CRASHED at frame %d! Error: %v\n", frameNum, err)
@@ -234,7 +240,8 @@ func loopingForFrames(config FrameLooperConfig) bool {
 
 		frame, isNew := config.gameClient.TryReadFrame()
 		if !isNew {
-			time.Sleep(1 * time.Millisecond)
+			// commented here assuming that we have the ticker for 30 FPS cap
+			// time.Sleep(1 * time.Millisecond)
 			continue
 		}
 

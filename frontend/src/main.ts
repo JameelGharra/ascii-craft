@@ -11,6 +11,7 @@ import { MessageRouter } from "./network/message-router";
 import { StatusHeader } from "./ui/status-header";
 import { TelemetryPanel } from "./ui/telemetry-panel";
 import { CommandTimeline } from "./ui/command-timeline";
+import { StatusOverlay } from "./ui/status-overlay";
 
 const urlConfig = {
     apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
@@ -62,6 +63,8 @@ async function initApp() {
         // --- UI Components ---
         const statusHeader = new StatusHeader();
         statusHeader.setConfig(config.video.width, config.video.height);
+        const statusOverlay = new StatusOverlay();
+        statusOverlay.showConnecting();
         const telemetryPanel = new TelemetryPanel();
         const commandTimeline = new CommandTimeline();
         const chatUI = new ChatUI(config.chat.max_messages);
@@ -85,6 +88,7 @@ async function initApp() {
         // --- Connection Events ---
         connectionManager.onConnect = () => {
             statusHeader.setConnected();
+            statusOverlay.hide();
             framePipeline.resetSyncState(); // Resync frames on fresh connect
             latencyTracker.start();
         };
@@ -95,8 +99,10 @@ async function initApp() {
         };
         
         connectionManager.onReconnectAttempt = (delayMs) => {
-            statusHeader.setReconnecting(Math.round(delayMs / 1000));
-            chatUI.appendChat("System", `Connection lost. Retrying in ${Math.round(delayMs / 1000)}s...`, "system");
+            const seconds = Math.round(delayMs / 1000);
+            statusHeader.setReconnecting(seconds);
+            statusOverlay.showReconnecting(seconds);
+            chatUI.appendChat("System", `Connection lost. Retrying in ${seconds}s...`, "system");
         };
 
         connectionManager.onMessage = (msg) => {

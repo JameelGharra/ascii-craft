@@ -14,8 +14,9 @@ export class MetricsCollector {
     private rawFrameSizeBytes: number;
     
     private lastCompressionRatio: number = 0;
-    private lastKeyFrame: boolean = false;
+    // private lastKeyFrame: boolean = false;
     private lastEncodingMethod: string = "RAW";
+    private latchedKeyFrame: boolean = false; // if we get an i-frame display it first then vanish
     private viewersCount: number = 0;
 
     constructor(videoWidth: number, videoHeight: number) {
@@ -35,7 +36,10 @@ export class MetricsCollector {
             this.byteCounts.shift();
         }
         this.lastCompressionRatio = Math.max(0, 1 - (packetSizeBytes / this.rawFrameSizeBytes));
-        this.lastKeyFrame = isKeyFrame;
+        // this.lastKeyFrame = isKeyFrame;
+        if (isKeyFrame) {
+            this.latchedKeyFrame = true;
+        }
         this.lastEncodingMethod = encodingMethod;
     }
 
@@ -47,11 +51,13 @@ export class MetricsCollector {
         const fps = this.frameTimestamps.length;
         const totalBytes = this.byteCounts.reduce((sum, entry) => sum + entry.bytes, 0);
         const bandwidthKbps = totalBytes / 1024; // kb/s
+        const wasKeyFrame = this.latchedKeyFrame;
+        this.latchedKeyFrame = false;
         return {
             fps,
             bandwidthKbps,
             compressionRatio: this.lastCompressionRatio * 100,
-            isKeyFrame: this.lastKeyFrame,
+            isKeyFrame: wasKeyFrame,
             encodingMethod: this.lastEncodingMethod,
             viewers: this.viewersCount
         };

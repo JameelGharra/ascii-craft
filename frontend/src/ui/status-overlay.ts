@@ -16,6 +16,12 @@ export class StatusOverlay {
         this.overlayEl.innerText = `CONNECTION LOST\n\nRETRYING IN ${seconds}S`;
     }
 
+    public showNoSignal() {
+        this.overlayEl.classList.remove("hidden", "error-state");
+        this.overlayEl.classList.add("warning-state");
+        this.overlayEl.innerHTML = `<span class="retro-spinner">⚙</span> NO VIDEO FEED`;
+    }
+
     public hide() {
         this.overlayEl.classList.add("hidden");
     }

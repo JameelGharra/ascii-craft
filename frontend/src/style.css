@@ -297,3 +297,20 @@ canvas {
     border-top: 1px solid var(--border);
     opacity: 0.7;
 }
+
+/* Retro Terminal Spinner */
+.retro-spinner {
+    display: inline-block;
+    margin-right: 15px;
+    animation: retro-spin 2s linear infinite;
+    font-weight: bold;
+}
+
+@keyframes retro-spin {
+    100% { transform: rotate(360deg); }
+}
+
+#game-overlay.warning-state {
+    color: var(--warning);
+    background: rgba(0, 0, 0, 0.85);
+}

@@ -69,6 +69,10 @@ async function initApp() {
         const commandTimeline = new CommandTimeline();
         const chatUI = new ChatUI(config.chat.max_messages);
         const inputController = new InputController(config);
+        let lastFrameTime = performance.now();
+        let isReceivingFrames = false;
+        const RENDER_UI_INTERVAL_MS = 250;
+        const WATCHDOG_INTERVAL_MS = 1500;
         
         // --- Routing Events ---
         messageRouter.onVote = (event) => {
@@ -88,13 +92,17 @@ async function initApp() {
         // --- Connection Events ---
         connectionManager.onConnect = () => {
             statusHeader.setConnected();
-            statusOverlay.hide();
-            framePipeline.resetSyncState(); // Resync frames on fresh connect
+
+            statusOverlay.showNoSignal();
+            isReceivingFrames = false;
+
+            framePipeline.resetSyncState();
             latencyTracker.start();
         };
         
         connectionManager.onDisconnect = () => {
             statusHeader.setDisconnected();
+            isReceivingFrames = false;
             latencyTracker.stop();
         };
         
@@ -110,6 +118,11 @@ async function initApp() {
         };
 
         connectionManager.onPacket = (buffer) => {
+            lastFrameTime = performance.now();
+            if(!isReceivingFrames) {
+                isReceivingFrames = true;
+                statusOverlay.hide();
+            }
             framePipeline.handlePacket(buffer);
         };
 
@@ -126,12 +139,18 @@ async function initApp() {
         // --- Render UI Loop ---
         setInterval(() => {
             if (connectionManager['ws']?.readyState === WebSocket.OPEN) {
+                const now = performance.now();
+                if(isReceivingFrames && now - lastFrameTime > WATCHDOG_INTERVAL_MS) {
+                    isReceivingFrames = false;
+                    statusOverlay.showNoSignal();
+                    chatUI.appendChat("System", "Video feed lost. Waiting for game server...", "warning");
+                }
+
                 const stats = metrics.getSnapshot();
                 telemetryPanel.update(stats, latencyTracker.getLatency());
             }
-        }, 250); // Updates the panel 4 times a second
+        }, RENDER_UI_INTERVAL_MS);
 
-        // Start connection!
         connectionManager.connect(`${urlConfig.wsBaseUrl}/ws`);
 
     } catch(err) {

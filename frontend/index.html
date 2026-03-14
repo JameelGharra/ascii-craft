@@ -34,17 +34,14 @@
         <aside id="side-panel">
             <div id="telemetry-panel">
                 <div class="panel-title">═══ TELEMETRY ═══</div>
-                <div id="telemetry-content">
-                    <br/><br/>
-                    <span style="color: #008f11">AWAITING DATA STREAM...</span>
-                </div>
+                <div id="telemetry-content" class="awaiting-state">AWAITING DATA STREAM...</div>
             </div>
 
             <div id="chat-container">
                 <div id="chat-log"></div>
                 <div id="input-bar">
                     <span class="prompt-char">&gt;</span>
-                    <input type="text" id="chat-input" placeholder="Enter command (!w, !jump, etc)..." autocomplete="off">
+                    <input type="text" id="chat-input" placeholder="AWAITING UPLINK..." autocomplete="off" disabled>
                 </div>
                 <!-- PHASE 5: Keyboard shortcut hints -->
                 <div class="input-hint">ESC: Clear | &uarr; / &darr;: Command History</div>

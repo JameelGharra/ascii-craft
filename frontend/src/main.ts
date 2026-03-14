@@ -73,6 +73,7 @@ async function initApp() {
         const RENDER_UI_INTERVAL_MS = 250;
         const WATCHDOG_INTERVAL_MS = 1500;
 
+        inputController.setSystemDisabled(true, "WAITING FOR SERVER...");
         let framePipeline: FramePipeline;
         const setupPipeline = (newConfig: AppConfig) => {
             statusHeader.setConfig(newConfig.video.width, newConfig.video.height);
@@ -115,12 +116,15 @@ async function initApp() {
             statusOverlay.showNoSignal();
             isReceivingFrames = false;
 
+            inputController.setSystemDisabled(true, "WAITING FOR VIDEO FEED...");
+
             framePipeline.resetSyncState();
             latencyTracker.start();
         };
         
         connectionManager.onDisconnect = () => {
             statusHeader.setDisconnected();
+            inputController.setSystemDisabled(true, "SYSTEM OFFLINE");
             isReceivingFrames = false;
             latencyTracker.stop();
         };
@@ -129,6 +133,7 @@ async function initApp() {
             const seconds = Math.round(delayMs / 1000);
             statusHeader.setReconnecting(seconds);
             statusOverlay.showReconnecting(seconds);
+            inputController.setSystemDisabled(true, `RECONNECTING IN ${seconds}S...`);
             chatUI.appendChat("System", `Connection lost. Retrying in ${seconds}s...`, "system");
         };
 
@@ -141,6 +146,7 @@ async function initApp() {
             if(!isReceivingFrames) {
                 isReceivingFrames = true;
                 statusOverlay.hide();
+                inputController.setSystemDisabled(false);
             }
             framePipeline.handlePacket(buffer);
         };
@@ -162,6 +168,7 @@ async function initApp() {
                 if(isReceivingFrames && now - lastFrameTime > WATCHDOG_INTERVAL_MS) {
                     isReceivingFrames = false;
                     statusOverlay.showNoSignal();
+                    inputController.setSystemDisabled(true, "NO VIDEO FEED");
                     chatUI.appendChat("System", "Video feed lost. Waiting for game server...", "warning");
                 }
 

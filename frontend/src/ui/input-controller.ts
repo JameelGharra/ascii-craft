@@ -5,6 +5,7 @@ export class InputController {
     private config: AppConfig;
     private standardCommandSet: Set<string>;
     private isOnCooldown = false;
+    private isSystemDisabled = false;
     
     // command history state
     private history: string[] =[];
@@ -26,10 +27,22 @@ export class InputController {
         this.standardCommandSet = new Set(config.commands.standard); 
     }
 
+    public setSystemDisabled(disabled: boolean, placeholderMessage: string = "Enter command (!w, !jump, etc)...") {
+        this.isSystemDisabled = disabled;
+        if (disabled) {
+            this.chatInput.disabled = true;
+            this.chatInput.placeholder = placeholderMessage;
+        } else if (!this.isOnCooldown) {
+            // Only enable it if we aren't currently serving a spam cooldown
+            this.chatInput.disabled = false;
+            this.chatInput.placeholder = placeholderMessage;
+        }
+    }
+
     private setupInputListener() {
         this.chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                if (this.isOnCooldown) return;
+                if (this.isOnCooldown || this.isSystemDisabled) return;
                 
                 const msg = this.chatInput.value.trim().toLowerCase();
                 if (msg) {
@@ -88,9 +101,11 @@ export class InputController {
         
         setTimeout(() => {
             this.isOnCooldown = false;
-            this.chatInput.disabled = false;
-            this.chatInput.placeholder = "Enter command (!w, !jump, etc)...";
-            this.chatInput.focus();
+            if (!this.isSystemDisabled) {
+                this.chatInput.disabled = false;
+                this.chatInput.placeholder = "Enter command (!w, !jump, etc)...";
+                this.chatInput.focus();
+            }
         }, this.config.chat.cooldown_ms);
     }
 }

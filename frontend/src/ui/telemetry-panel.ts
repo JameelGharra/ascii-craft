@@ -40,5 +40,7 @@ export class TelemetryPanel {
         ].join("\n");
 
         this.contentEl.innerHTML = html;
+        this.contentEl.classList.remove("awaiting-state"); // just for properly showing awaiting
+
     }
 }

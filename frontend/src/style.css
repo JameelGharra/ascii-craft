@@ -157,6 +157,18 @@ canvas {
     white-space: pre; /* Ensures our formatting in Phase 4 looks like a table */
 }
 
+#telemetry-content.awaiting-state {
+    white-space: normal; /* Override the 'pre' so it centers cleanly */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 150px;
+    color: var(--secondary);
+    font-weight: bold;
+    letter-spacing: 1px;
+    animation: pulse 2s infinite;
+}
+
 /* Chat Box */
 #chat-container {
     flex: 1;
@@ -313,4 +325,65 @@ canvas {
 #game-overlay.warning-state {
     color: var(--warning);
     background: rgba(0, 0, 0, 0.85);
+}
+/* --- RESPONSIVE DESIGN FOR MOBILE --- */
+@media (max-width: 950px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden;
+        overflow-y: auto; /* Force scrolling on the body */
+        align-items: flex-start;
+    }
+
+    #app-grid {
+        height: auto;
+        min-height: 100vh;
+        border: none;
+    }
+
+    #main-content {
+        flex-direction: column;
+        overflow: visible; /* Release the hidden constraint */
+    }
+
+    #game-section {
+        flex: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 10px;
+        max-height: none; 
+    }
+
+    .crt-wrapper {
+        max-width: 100%;
+        margin-bottom: 10px;
+        height: auto;
+    }
+
+    #command-timeline {
+        height: 30px;
+        font-size: 0.8em;
+    }
+
+    #side-panel {
+        flex: none; /* Don't flex, just take up natural block space */
+        width: 100%;
+        max-width: 100%;
+        height: auto; 
+    }
+
+    #telemetry-panel {
+        min-height: auto;
+    }
+
+    #chat-container {
+        /* On mobile, give chat a fixed height so it's a scrollable box */
+        height: 400px; 
+        flex: none;
+    }
+
+    #chat-log {
+        min-height: auto;
+    }
 }

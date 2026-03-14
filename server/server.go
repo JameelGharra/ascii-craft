@@ -23,7 +23,7 @@ import (
 //go:generate go run tools/gen_protocol/main.go
 
 const (
-	TotalFrames      = 10000
+	TotalFrames      = 0 // 0 for infinite frames
 	BinaryPath       = "../game/craft.exe"
 	Stride           = 1
 	RefreshRate      = 120 // after how much frames to send key frame (i-frame)
@@ -118,8 +118,11 @@ func main() {
 	}
 	defer client.Close()
 
-	fmt.Printf("Starting benchmark: %d Frames with random commands...\n", TotalFrames)
-
+	if TotalFrames > 0 {
+		fmt.Printf("Starting stream: Capped at %d Frames...\n", TotalFrames)
+	} else {
+		fmt.Println("Starting stream: Infinite frames (Daemon mode)...")
+	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	possibleCmds := []uint32{
 		ipc.CmdForward, ipc.CmdBackward,
@@ -245,7 +248,7 @@ func loopingForFrames(config FrameLooperConfig) bool {
 	fpsTicker := time.NewTicker(FrameInterval)
 	defer fpsTicker.Stop()
 
-	for frameNum := 0; frameNum < TotalFrames; {
+	for frameNum := 0; config.numOfFrames <= 0 || frameNum < config.numOfFrames; {
 		<-fpsTicker.C
 		select {
 		case err := <-config.gameProcessDone:

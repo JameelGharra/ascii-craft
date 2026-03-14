@@ -8,12 +8,16 @@ export class MessageRouter {
     public onViewers?: (count: number) => void;
     public onPong?: (originalTime: number) => void;
     public onSystemMessage?: (msg: string) => void;
+    public onReloadConfig?: () => void;
 
     public handleMessage(data: string) {
         if (data.startsWith('{')) {
             try {
                 const parsed = JSON.parse(data);
                 switch (parsed.type) {
+                    case 'reload_config':
+                        this.onReloadConfig?.();
+                        break;
                     case 'vote':
                         if (typeof parsed.votes !== 'number' || typeof parsed.command !== 'string') {
                             throw new Error(`Invalid vote message format: ${data}`);

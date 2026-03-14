@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -24,7 +25,63 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-const maxMessageSize = 32
+const (
+	maxMessageSize            = 32
+	ConfigPacketType          = 0x01
+	VideoGameserverPacketType = 0x02
+)
+
+type AppConfig struct {
+	Video struct {
+		Width  uint32 `json:"width"`
+		Height uint32 `json:"height"`
+	} `json:"video"`
+	Chat struct {
+		CooldownMs  int `json:"cooldown_ms"`
+		MaxMessages int `json:"max_messages"`
+	} `json:"chat"`
+	Commands map[string]interface{} `json:"commands"`
+}
+
+type ConfigManager struct {
+	mu     sync.RWMutex
+	config AppConfig
+}
+
+var globalConfig = &ConfigManager{
+	config: AppConfig{
+		// Default Relay UX settings
+		Chat: struct {
+			CooldownMs  int `json:"cooldown_ms"`
+			MaxMessages int `json:"max_messages"`
+		}{CooldownMs: 500, MaxMessages: 35},
+		// Safe defaults just in case UI fetches before game connects
+		Video: struct {
+			Width  uint32 `json:"width"`
+			Height uint32 `json:"height"`
+		}{Width: 212, Height: 66},
+		// these just to make sure that we live even gameserver off
+		Commands: map[string]interface{}{
+			"standard":      []string{},
+			"parameterized": map[string]any{},
+		},
+	},
+}
+
+func (cm *ConfigManager) UpdateGameConfig(width, height uint32, commands map[string]interface{}) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.config.Video.Width = width
+	cm.config.Video.Height = height
+	cm.config.Commands = commands
+}
+
+func (cm *ConfigManager) GetJSON() []byte {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	data, _ := json.Marshal(cm.config)
+	return data
+}
 
 func readPump(c *Client) {
 	defer func() {
@@ -147,8 +204,15 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 	// 4. Create a Buffered Reader
 	// CRITICAL PERFORMANCE OPTIMIZATION
 	reader := bufio.NewReader(conn)
-	packetCount := 0
+	packetCount := 0 // only counting video frame packets
 	for {
+
+		packetType, err := reader.ReadByte()
+		if err != nil {
+			log.Println("Game Engine Disconnected:", err)
+			return
+		}
+
 		// 5. Use our Framer (from utils.go)
 		packet, err := ReadFullPacket(reader, reader) // i know sounds like a typo but its not
 		if err != nil {
@@ -157,39 +221,38 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 			return
 		}
 
-		// 6. Send to the Hub
-		// This sends the raw bytes to the broadcast channel.
-		// The Hub will pick this up and fan it out to the 1000 websockets.
-		fmt.Printf("Received packet (%d): %d bytes\n", packetCount, len(packet))
-		hub.broadcast <- packet
-		packetCount++
+		switch packetType {
+		case ConfigPacketType:
+			// Type 0x01: Handshake / Config
+			var incoming struct {
+				Video struct {
+					Width  uint32 `json:"width"`
+					Height uint32 `json:"height"`
+				} `json:"video"`
+				Commands map[string]interface{} `json:"commands"`
+			}
+			if err := json.Unmarshal(packet, &incoming); err == nil {
+				globalConfig.UpdateGameConfig(incoming.Video.Width, incoming.Video.Height, incoming.Commands)
+				log.Printf("Game Config Updated: %dx%d", incoming.Video.Width, incoming.Video.Height)
+				// Tell all frontend clients to reload their config
+				hub.broadcastText <- `{"type":"reload_config"}`
+			}
+		case VideoGameserverPacketType:
+			// Type 0x02: Video Frame
+			// 6. Send to the Hub
+			// This sends the raw bytes to the broadcast channel.
+			// The Hub will pick this up and fan it out to the 1000 websockets.
+			hub.broadcast <- packet
+			fmt.Printf("Received packet (%d): %d bytes\n", packetCount, len(packet))
+			packetCount++
+		}
 	}
 }
 
 func handleConfig(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*") // enables CORS so vite dev server can fetch this config
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
-	configJSON := `{
-		"video": {
-			"width": 212,
-			"height": 66
-		},
-		"chat": {
-			"cooldown_ms": 500,
-			"max_messages": 35
-		},
-		"commands": {
-			"standard":[
-				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy", 
-				"!turnleft", "!turnright", "!lookup", "!lookdown", 
-				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright"
-			],
-			"parameterized": {
-				"!slot": {"min": 0, "max": 9}
-			}
-		}
-	}`
-	w.Write([]byte(configJSON))
+	w.Write(globalConfig.GetJSON())
 }
 
 func main() {

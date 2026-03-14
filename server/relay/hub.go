@@ -27,10 +27,11 @@ type clientCommand struct { // mainly to add 1 user = 1 vote support
 }
 
 type Hub struct {
-	clients    map[*Client]struct{} // surprised that Go doesn't have a set
-	broadcast  chan []byte          // msgs to send from gameserver
-	register   chan *Client
-	unregister chan *Client
+	clients       map[*Client]struct{} // surprised that Go doesn't have a set
+	broadcast     chan []byte          // msgs to send from gameserver
+	broadcastText chan string          // for events to all clients
+	register      chan *Client
+	unregister    chan *Client
 
 	commands chan clientCommand // cmds aggregated from clients
 	gameCmds chan string        // the cmds that won sent with tcp
@@ -38,12 +39,13 @@ type Hub struct {
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]struct{}),
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		commands:   make(chan clientCommand, commandBufferSize),
-		gameCmds:   make(chan string, gameCmdsBufferSize),
+		clients:       make(map[*Client]struct{}),
+		broadcast:     make(chan []byte),
+		broadcastText: make(chan string),
+		register:      make(chan *Client),
+		unregister:    make(chan *Client),
+		commands:      make(chan clientCommand, commandBufferSize),
+		gameCmds:      make(chan string, gameCmdsBufferSize),
 	}
 }
 
@@ -67,8 +69,16 @@ func (h *Hub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.sendVideo) // Tell the client's pump to stop
+				close(client.sendText)
 			}
 
+		case textMsg := <-h.broadcastText:
+			for client := range h.clients {
+				select {
+				case client.sendText <- textMsg:
+				default:
+				}
+			}
 		// new frame from game
 		case packet := <-h.broadcast:
 			for client := range h.clients {

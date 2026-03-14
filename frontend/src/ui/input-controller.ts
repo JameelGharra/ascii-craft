@@ -20,6 +20,11 @@ export class InputController {
         this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
         this.setupInputListener();
     }
+    
+    public updateConfig(config: AppConfig) { 
+        this.config = config; 
+        this.standardCommandSet = new Set(config.commands.standard); 
+    }
 
     private setupInputListener() {
         this.chatInput.addEventListener('keydown', (e) => {

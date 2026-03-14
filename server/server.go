@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -13,10 +14,9 @@ import (
 	"time"
 
 	"github.com/JameelGharra/ascii-craft/server/encoder"
+	"github.com/JameelGharra/ascii-craft/server/ipc"
 	"github.com/JameelGharra/ascii-craft/server/protocol"
 	"github.com/JameelGharra/ascii-craft/server/utils"
-
-	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
 
 // producing the protocol constants before running
@@ -50,6 +50,34 @@ var commandMap = map[string]uint32{
 	"!jumpbackward": ipc.CmdJumpBackward,
 	"!jumpleft":     ipc.CmdJumpLeft,
 	"!jumpright":    ipc.CmdJumpRight,
+}
+
+func dynamicHandshake(conn net.Conn, width, height int) {
+	gameConfig := map[string]interface{}{
+		"video": map[string]int{
+			"width":  width,
+			"height": height,
+		},
+		"commands": map[string]interface{}{
+			"standard": []string{
+				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy",
+				"!turnleft", "!turnright", "!lookup", "!lookdown",
+				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright",
+			},
+			"parameterized": map[string]interface{}{
+				"!slot": map[string]int{"min": 0, "max": 9},
+			},
+		},
+	}
+	configBytes, _ := json.Marshal(gameConfig)
+
+	// Frame format:[Type (1 byte)] [Varint Len] [Data]
+	var header [10]byte
+	header[0] = 0x01 // 0x01 = Handshake
+	n, _ := utils.PutVarint(header[1:], uint32(len(configBytes)))
+	conn.Write(header[:n+1])
+	conn.Write(configBytes)
+
 }
 
 func main() {
@@ -140,6 +168,7 @@ initLoop:
 			conn, err = net.Dial("tcp", "localhost:9000")
 			if err == nil {
 				fmt.Println("Connected to Relay!")
+				dynamicHandshake(conn, width, height)
 				break
 			}
 			// Retry every 1s if Relay is down
@@ -262,8 +291,9 @@ func loopingForFrames(config FrameLooperConfig) bool {
 		// just some prefix length framing right here
 		payload := packetBuilder.Bytes()
 		payloadLen := uint32(len(payload))
-		n, _ := utils.PutVarint(headerbuff[:], payloadLen)
-		buffers := net.Buffers{headerbuff[:n], payload}
+		headerbuff[0] = 0x02
+		n, _ := utils.PutVarint(headerbuff[1:], payloadLen)
+		buffers := net.Buffers{headerbuff[:n+1], payload}
 		if _, err := buffers.WriteTo(config.conn); err != nil {
 			fmt.Printf("Failed to write frame %d to connection: %v\n", frameNum, err)
 			return false

@@ -26,11 +26,12 @@ function checkUrlConfig() {
     }
 }
 
-async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000): Promise<AppConfig> {
+const DEFAULT_CONFIG_FETCH_DELAY_MS = 2000;
+async function fetchConfigWithRetry(url: string, maxRetries = Infinity, delayMs = DEFAULT_CONFIG_FETCH_DELAY_MS): Promise<AppConfig> {
     const statusEl = document.getElementById("status");
     for(let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { cache: "no-store" });
             if(!response.ok) throw new Error(`HTTP error status: ${response.status}`);
             const data = await response.json();
             if(!isValidAppConfig(data)) throw new Error("Invalid config format from server");
@@ -39,7 +40,7 @@ async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000
         } catch(err) {
             console.warn(`Config fetch attempt ${attempt} failed:`, err);
             if (statusEl) {
-                statusEl.innerHTML = `<span class="status-dot status-wait"></span>WAITING FOR SERVER (${attempt}/${maxRetries})`;
+                statusEl.innerHTML = `<span class="status-dot status-wait"></span>WAITING FOR SERVER (${attempt}/${maxRetries === Infinity ? '∞' : maxRetries})`;
             }
             if (attempt < maxRetries) {
                 await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -51,18 +52,16 @@ async function fetchConfigWithRetry(url: string, maxRetries = 10, delayMs = 2000
 
 async function initApp() {
     try {
-        const config = await fetchConfigWithRetry(`${urlConfig.apiBaseUrl}/api/config`);
+        const MAX_CONFIG_FETCH_RETRIES = 10;
+        let config = await fetchConfigWithRetry(`${urlConfig.apiBaseUrl}/api/config`, MAX_CONFIG_FETCH_RETRIES);
         
         // --- Infrastructure ---
         const connectionManager = new ConnectionManager();
-        const metrics = new MetricsCollector(config.video.width, config.video.height);
+        let metrics = new MetricsCollector(config.video.width, config.video.height);
         const latencyTracker = new LatencyTracker(connectionManager);
         const messageRouter = new MessageRouter();
-        const framePipeline = new FramePipeline('gameCanvas', config.video.width, config.video.height, metrics);
-
         // --- UI Components ---
         const statusHeader = new StatusHeader();
-        statusHeader.setConfig(config.video.width, config.video.height);
         const statusOverlay = new StatusOverlay();
         statusOverlay.showConnecting();
         const telemetryPanel = new TelemetryPanel();
@@ -73,8 +72,28 @@ async function initApp() {
         let isReceivingFrames = false;
         const RENDER_UI_INTERVAL_MS = 250;
         const WATCHDOG_INTERVAL_MS = 1500;
+
+        let framePipeline: FramePipeline;
+        const setupPipeline = (newConfig: AppConfig) => {
+            statusHeader.setConfig(newConfig.video.width, newConfig.video.height);
+            metrics = new MetricsCollector(newConfig.video.width, newConfig.video.height);
+            
+            // Clean up old canvas bindings if necessary, though FramePipeline overwrites it
+            framePipeline = new FramePipeline('gameCanvas', newConfig.video.width, newConfig.video.height, metrics);
+            framePipeline.resetSyncState();
+            
+            inputController.updateConfig(newConfig); // We need to add this method to InputController!
+        };
+        
+        setupPipeline(config);
         
         // --- Routing Events ---
+        messageRouter.onReloadConfig = async () => {
+            console.log("Server indicated a configuration change. Reloading...");
+            config = await fetchConfigWithRetry(`${urlConfig.apiBaseUrl}/api/config`, 3, 1000);
+            setupPipeline(config);
+            chatUI.appendChat("System", `Game feed updated to ${config.video.width}x${config.video.height}`, "system");
+        };
         messageRouter.onVote = (event) => {
             commandTimeline.addCommand(event.command, event.votes);
             chatUI.appendChat("Server", `Majority voted for ${event.command} (${event.votes} votes)`, "server");

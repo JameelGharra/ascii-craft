@@ -1,23 +1,21 @@
 export class ChatUI {
     private chatLog: HTMLDivElement;
-    private statusEl: HTMLDivElement;
     private maxMessages: number;
 
     constructor(maxMessages: number) {
         this.maxMessages = maxMessages;
         this.chatLog = document.getElementById("chat-log") as HTMLDivElement;
-        this.statusEl = document.getElementById("status") as HTMLDivElement;
-    }
-
-    public updateStatus(text: string) {
-        if (this.statusEl) {
-            this.statusEl.innerText = text;
-        }
     }
 
     public appendChat(sender: string, message: string, cssClass: string) {
         const el = document.createElement("div");
         el.className = "chat-msg";
+
+        // Add Timestamp
+        const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "time";
+        timeSpan.textContent = `[${time}]`;
 
         const senderSpan = document.createElement("span");
         senderSpan.className = cssClass; 
@@ -27,6 +25,7 @@ export class ChatUI {
         msgSpan.className = "msg-text";
         msgSpan.textContent = message;
 
+        el.appendChild(timeSpan);
         el.appendChild(senderSpan);
         el.appendChild(msgSpan);
         

@@ -1,25 +1,42 @@
 import { HuffmanDecoder } from '../decoder/huffman';
 import { decodeRLE } from '../decoder/rle';
+import type { MetricsCollector } from '../metrics/metrics-collector';
 import { BinaryReader, FLAG_IS_COMPRESSED, FLAG_IS_DELTA, FLAG_METHOD, SHIFT_TABLE_MODE, MASK_TABLE_MODE, TABLE_MODE_RAW } from '../protocol';
 import { Renderer } from "../renderer";
 
 export class FramePipeline {
     private renderer: Renderer;
     private huffman: HuffmanDecoder;
+    private metrics: MetricsCollector;
     private prevFrame: Uint8Array;
     private currFrame: Uint8Array;
     
     private totalPixels: number;
     private lastSeq: number = -1;
     private hasReceivedKeyFrame = false;
+    private pendingRender: boolean = false;
 
-    constructor(canvasId: string, width: number, height: number) {
+
+    private setupRenderingLoop() {
+        const renderLoop = () => {
+            if (this.pendingRender) {
+                this.renderer.render(this.currFrame);
+                this.pendingRender = false;
+            }
+            requestAnimationFrame(renderLoop);
+        };
+        requestAnimationFrame(renderLoop);
+    }
+
+    constructor(canvasId: string, width: number, height: number, metrics: MetricsCollector) {
         this.totalPixels = width * height;
         const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
         this.renderer = new Renderer(canvas, width, height);
+        this.metrics = metrics;
         this.prevFrame = new Uint8Array(this.totalPixels);
         this.currFrame = new Uint8Array(this.totalPixels);
         this.huffman = new HuffmanDecoder();
+        this.setupRenderingLoop();
     }
 
     public resetSyncState() {
@@ -40,7 +57,7 @@ export class FramePipeline {
             const seq = reader.readVarint();
             const dataLen = reader.readVarint(); 
             
-            console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
+            // console.log(`Received packet: seq=${seq}, compressed=${isCompressed}, method=${isHuffman ? "huffman" : "rle"}, delta=${isDelta}, tableMode=${tableMode}`);
             
             if (this.lastSeq !== -1) {
                 if (seq === this.lastSeq) return;
@@ -95,8 +112,13 @@ export class FramePipeline {
                 }
             }
 
-            this.renderer.render(this.currFrame);
+            this.pendingRender = true;
             this.prevFrame.set(this.currFrame);
+            let methodStr = "RAW";
+            if (isCompressed) {
+                methodStr = isHuffman ? "HUFFMAN" : "RLE";
+            }
+            this.metrics.recordFrame(rawBuffer.byteLength, !isDelta, methodStr);
         } catch(err) {
             console.error("Frame pipeline encountered a decoding error:", err);
             this.hasReceivedKeyFrame = false;

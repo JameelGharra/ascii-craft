@@ -1,91 +1,389 @@
-body {
-    background-color: #121212;
-    color: #ffffff;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+:root {
+    /* Color Palette */
+    --bg-color: #050505;
+    --panel-bg: #0a0e0a;
+    --primary: #00ff41;    /* Bright Terminal Green */
+    --secondary: #008f11;  /* Dim Green */
+    --accent: #00cc33;
+    --error: #ff3333;
+    --warning: #ffcc00;
+    --border: #1a3a1a;
+    --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+    box-sizing: border-box;
     margin: 0;
-    padding: 20px;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--primary);
+    font-family: var(--font-mono);
+    height: 100vh;
     display: flex;
     justify-content: center;
-    height: 100vh;
-    box-sizing: border-box;
+    align-items: center;
+    overflow: hidden; /* Prevents ugly scrollbars on the window */
 }
 
-#container {
+/* The Main Dashboard Wrapper */
+#app-grid {
     display: flex;
-    gap: 20px;
-    max-width: 1200px;
-    width: 100%;
-    height: 100%;
+    flex-direction: column;
+    width: 100vw;
+    max-width: 1400px;
+    height: 100vh;
+    max-height: 900px;
+    border: 1px solid var(--border);
+    background: var(--panel-bg);
+    box-shadow: 0 0 30px rgba(0, 255, 65, 0.05);
 }
 
-#game-view {
+/* --- HEADER --- */
+#status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: #020502;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+.logo { color: var(--primary); }
+#status { color: var(--secondary); transition: color 0.3s; text-transform: uppercase; }
+#resolution-badge { color: var(--secondary); font-size: 0.9em; }
+
+/* --- MAIN CONTENT (Split View) --- */
+#main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* LEFT: GAME + TIMELINE */
+#game-section {
     flex: 3;
     display: flex;
     flex-direction: column;
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    gap: 15px;
+    justify-content: center;
     align-items: center;
+    background: #000;
+    
+    /* FIX: Allow the section to shrink below content size so it doesn't overflow */
+    min-height: 0; 
 }
 
-canvas {
-    background-color: #000;
+/* CRT Scanline Effect Overlay */
+.crt-wrapper {
+    position: relative;
+    /* FIX: Let the wrapper dictate the 16:10 size, and limit its max height */
     width: 100%;
-    max-width: 848px; /* 212 * 4 */
-    image-rendering: pixelated; /* Keeps ASCII crisp */
-    border: 2px solid #333;
-    border-radius: 4px;
+    max-width: 1000px;
+    max-height: 100%;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+    margin: auto; /* Keeps it perfectly centered */
+    
+    border: 1px solid var(--border);
+    box-shadow: 0 0 25px rgba(0, 255, 65, 0.08); /* Faint green glow */
+    background: #000;
 }
 
-#status {
-    margin-top: 10px;
+/* The actual scanlines drawn over the canvas */
+.crt-wrapper::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(
+
+    
+        rgba(18, 16, 16, 0) 50%, 
+        rgba(0, 0, 0, 0.3) 50%
+    );
+    z-index: 2;
+    background-size: 100% 3px; 
+    pointer-events: none; 
+}
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated; /* Keeps ASCII crisp even when stretched */
+    filter: brightness(1.1) contrast(1.1); /* Slight pop for the "screen" */
+}
+
+#command-timeline {
+    height: 40px;
+    width: 100%;
+    max-width: 848px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+
+/* RIGHT: TELEMETRY + CHAT */
+#side-panel {
+    flex: 1;
+    min-width: 320px;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-color);
+}
+
+/* Telemetry Box */
+#telemetry-panel {
+    padding: 15px;
+    border-bottom: 1px solid var(--border);
+    min-height: 240px;
+}
+.panel-title {
+    color: var(--secondary);
+    margin-bottom: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+#telemetry-content {
+    font-size: 0.9em;
+    line-height: 1.8;
+    color: var(--primary);
+    white-space: pre; /* Ensures our formatting in Phase 4 looks like a table */
+}
+
+#telemetry-content.awaiting-state {
+    white-space: normal; /* Override the 'pre' so it centers cleanly */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 150px;
+    color: var(--secondary);
     font-weight: bold;
-    color: #888;
+    letter-spacing: 1px;
+    animation: pulse 2s infinite;
 }
 
-#chat-view {
+/* Chat Box */
+#chat-container {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #1e1e1e;
-    border: 1px solid #333;
-    border-radius: 4px;
     overflow: hidden;
-    min-width: 250px;
 }
-
 #chat-log {
     flex: 1;
-    padding: 10px;
+    padding: 15px;
     overflow-y: auto;
-    font-size: 14px;
-    word-wrap: break-word;
+    font-size: 0.85em;
+    line-height: 1.5;
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary) var(--bg-color);
 }
+#chat-log::-webkit-scrollbar { width: 6px; }
+#chat-log::-webkit-scrollbar-thumb { background: var(--secondary); }
 
-.chat-msg {
-    margin-bottom: 5px;
-    line-height: 1.4;
+/* Chat Message Formatting */
+.chat-msg { margin-bottom: 6px; word-wrap: break-word; }
+.chat-msg .time { color: var(--secondary); margin-right: 8px; }
+.chat-msg .user { color: #00ccff; font-weight: bold; margin-right: 8px;}
+.chat-msg .system { color: var(--error); font-weight: bold; margin-right: 8px;}
+.chat-msg .server { color: var(--warning); font-weight: bold; margin-right: 8px;}
+.chat-msg .msg-text { color: #e0e0e0; }
+
+/* Input Bar */
+#input-bar {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    border-top: 1px solid var(--border);
+    background: #020502;
 }
-
-.chat-msg span.user { color: #00ffcc; font-weight: bold; }
-.chat-msg span.system { color: #ff5555; font-weight: bold; }
-.chat-msg span.server { color: #f1fa8c; font-weight: bold; }
-.chat-msg span.msg-text { color: #ffffff; }
-
-#chat-input-container {
-    padding: 10px;
-    background: #252525;
-    border-top: 1px solid #333;
+.prompt-char {
+    color: var(--primary);
+    font-weight: bold;
+    margin-right: 10px;
 }
-
 #chat-input {
-    width: 100%;
-    padding: 8px;
-    background: #121212;
-    color: #fff;
-    border: 1px solid #444;
-    border-radius: 4px;
-    box-sizing: border-box;
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 0.95em;
     outline: none;
 }
+#chat-input::placeholder {
+    color: var(--secondary);
+    opacity: 0.5;
+}
+#chat-input:disabled {
+    color: var(--error);
+}
+/* Connection Status Dot */
+.status-dot {
+    display: inline-block;
+    margin-right: 8px;
+    border-radius: 50%;
+    width: 10px;
+    height: 10px;
+}
+.status-live { 
+    background-color: var(--primary); 
+    box-shadow: 0 0 8px var(--primary); 
+    animation: pulse 2s infinite; 
+}
+.status-offline { 
+    background-color: var(--error); 
+    box-shadow: 0 0 8px var(--error); 
+}
+.status-wait { 
+    background-color: var(--warning); 
+    box-shadow: 0 0 8px var(--warning); 
+}
 
-#chat-input:focus {
-    border-color: #00ffcc;
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.command-chip {
+    background-color: #0d1a0d;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    padding: 4px 12px;
+    margin-right: 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9em;
+    white-space: nowrap;
+    animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Canvas Overlay */
+#game-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.85); /* Dark translucent background */
+    color: var(--primary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5em;
+    font-weight: bold;
+    z-index: 10;
+    letter-spacing: 2px;
+    text-align: center;
+    white-space: pre-line; /* Allows \n to work in innerText */
+    transition: opacity 0.2s;
+}
+
+#game-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#game-overlay.error-state {
+    color: var(--error);
+}
+
+/* Keyboard Input Hint */
+.input-hint {
+    font-size: 0.75em;
+    color: var(--secondary);
+    text-align: right;
+    padding: 6px 15px;
+    background: #020502;
+    border-top: 1px solid var(--border);
+    opacity: 0.7;
+}
+
+/* Retro Terminal Spinner */
+.retro-spinner {
+    display: inline-block;
+    margin-right: 15px;
+    animation: retro-spin 2s linear infinite;
+    font-weight: bold;
+}
+
+@keyframes retro-spin {
+    100% { transform: rotate(360deg); }
+}
+
+#game-overlay.warning-state {
+    color: var(--warning);
+    background: rgba(0, 0, 0, 0.85);
+}
+/* --- RESPONSIVE DESIGN FOR MOBILE --- */
+@media (max-width: 950px) {
+    body {
+        height: auto;
+        min-height: 100vh;
+        overflow-x: hidden;
+        overflow-y: auto; /* Force scrolling on the body */
+        align-items: flex-start;
+    }
+
+    #app-grid {
+        height: auto;
+        min-height: 100vh;
+        border: none;
+    }
+
+    #main-content {
+        flex-direction: column;
+        overflow: visible; /* Release the hidden constraint */
+    }
+
+    #game-section {
+        flex: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 10px;
+        max-height: none; 
+    }
+
+    .crt-wrapper {
+        max-width: 100%;
+        margin-bottom: 10px;
+        height: auto;
+    }
+
+    #command-timeline {
+        height: 30px;
+        font-size: 0.8em;
+    }
+
+    #side-panel {
+        flex: none; /* Don't flex, just take up natural block space */
+        width: 100%;
+        max-width: 100%;
+        height: auto; 
+    }
+
+    #telemetry-panel {
+        min-height: auto;
+    }
+
+    #chat-container {
+        /* On mobile, give chat a fixed height so it's a scrollable box */
+        height: 400px; 
+        flex: none;
+    }
+
+    #chat-log {
+        min-height: auto;
+    }
 }

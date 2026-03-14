@@ -3,26 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASCII Craft - Twitch Plays</title>
-    <!-- [FIX 15] Link to external stylesheet -->
-    <link rel="stylesheet" href="/src/style.css"> 
+    <title>CRAFT-1 // Telemetry Terminal</title>
+    <link rel="icon" href="data:,">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
 
-<div id="container">
-    <div id="game-view">
-        <canvas id="gameCanvas" width="212" height="66"></canvas>
-        <div id="status">Status: Disconnected</div>
-    </div>
-    
-    <div id="chat-view">
-        <div id="chat-log">
-            <div class="chat-msg"><span class="system">System: </span><span class="msg-text">Welcome to ASCII Craft! Type !w, !a, !s, !d, !jump, !turnleft, etc.</span></div>
+<div id="app-grid">
+    <header id="status-header">
+        <div class="logo">CRAFT-1 // UPLINK</div>
+        <div id="status">CONNECTING...</div>
+        <div id="resolution-badge">212x66 @ 8-BIT</div>
+    </header>
+
+    <main id="main-content">
+        <div id="game-section">
+            <div class="crt-wrapper">
+                <!-- PHASE 5: Overlay for connection states -->
+                <div id="game-overlay">AWAITING UPLINK...</div>
+                <canvas id="gameCanvas" width="212" height="66"></canvas>
+            </div>
+            <div id="command-timeline"></div>
         </div>
-        <div id="chat-input-container">
-            <input type="text" id="chat-input" placeholder="Type a command and press Enter..." autocomplete="off">
-        </div>
-    </div>
+
+        <aside id="side-panel">
+            <div id="telemetry-panel">
+                <div class="panel-title">═══ TELEMETRY ═══</div>
+                <div id="telemetry-content" class="awaiting-state">AWAITING DATA STREAM...</div>
+            </div>
+
+            <div id="chat-container">
+                <div id="chat-log"></div>
+                <div id="input-bar">
+                    <span class="prompt-char">&gt;</span>
+                    <input type="text" id="chat-input" placeholder="AWAITING UPLINK..." autocomplete="off" disabled>
+                </div>
+                <!-- PHASE 5: Keyboard shortcut hints -->
+                <div class="input-hint">ESC: Clear | &uarr; / &darr;: Command History</div>
+            </div>
+        </aside>
+    </main>
 </div>
 
 <script type="module" src="/src/main.ts"></script>

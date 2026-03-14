@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -13,22 +14,23 @@ import (
 	"time"
 
 	"github.com/JameelGharra/ascii-craft/server/encoder"
+	"github.com/JameelGharra/ascii-craft/server/ipc"
 	"github.com/JameelGharra/ascii-craft/server/protocol"
 	"github.com/JameelGharra/ascii-craft/server/utils"
-
-	"github.com/JameelGharra/ascii-craft/server/ipc"
 )
 
 // producing the protocol constants before running
 //go:generate go run tools/gen_protocol/main.go
 
 const (
-	TotalFrames    = 10000
-	BinaryPath     = "../game/craft.exe"
-	Stride         = 1
-	RefreshRate    = 120 // after how much frames to send key frame (i-frame)
-	BotMode        = 0   // rng based cmds
-	ControlledMode = 1
+	TotalFrames      = 0 // 0 for infinite frames
+	BinaryPath       = "../game/craft.exe"
+	Stride           = 1
+	RefreshRate      = 120 // after how much frames to send key frame (i-frame)
+	BotMode          = 0   // rng based cmds
+	ControlledMode   = 1
+	FrameInterval    = time.Second / 60 // capping it so it wont ruin the browser
+	KeyFrameInterval = 2 * time.Second  // keyframe refresh
 )
 
 var commandMap = map[string]uint32{
@@ -48,6 +50,34 @@ var commandMap = map[string]uint32{
 	"!jumpbackward": ipc.CmdJumpBackward,
 	"!jumpleft":     ipc.CmdJumpLeft,
 	"!jumpright":    ipc.CmdJumpRight,
+}
+
+func dynamicHandshake(conn net.Conn, width, height int) {
+	gameConfig := map[string]interface{}{
+		"video": map[string]int{
+			"width":  width,
+			"height": height,
+		},
+		"commands": map[string]interface{}{
+			"standard": []string{
+				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy",
+				"!turnleft", "!turnright", "!lookup", "!lookdown",
+				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright",
+			},
+			"parameterized": map[string]interface{}{
+				"!slot": map[string]int{"min": 0, "max": 9},
+			},
+		},
+	}
+	configBytes, _ := json.Marshal(gameConfig)
+
+	// Frame format:[Type (1 byte)] [Varint Len] [Data]
+	var header [10]byte
+	header[0] = 0x01 // 0x01 = Handshake
+	n, _ := utils.PutVarint(header[1:], uint32(len(configBytes)))
+	conn.Write(header[:n+1])
+	conn.Write(configBytes)
+
 }
 
 func main() {
@@ -88,8 +118,11 @@ func main() {
 	}
 	defer client.Close()
 
-	fmt.Printf("Starting benchmark: %d Frames with random commands...\n", TotalFrames)
-
+	if TotalFrames > 0 {
+		fmt.Printf("Starting stream: Capped at %d Frames...\n", TotalFrames)
+	} else {
+		fmt.Println("Starting stream: Infinite frames (Daemon mode)...")
+	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	possibleCmds := []uint32{
 		ipc.CmdForward, ipc.CmdBackward,
@@ -138,6 +171,7 @@ initLoop:
 			conn, err = net.Dial("tcp", "localhost:9000")
 			if err == nil {
 				fmt.Println("Connected to Relay!")
+				dynamicHandshake(conn, width, height)
 				break
 			}
 			// Retry every 1s if Relay is down
@@ -210,7 +244,12 @@ func loopingForFrames(config FrameLooperConfig) bool {
 	packetBuilder := protocol.NewPacketBuilder(config.packetInternalBuffer)
 	var headerbuff [5]byte
 	var isKeyFrame bool = true
-	for frameNum := 0; frameNum < TotalFrames; {
+
+	fpsTicker := time.NewTicker(FrameInterval)
+	defer fpsTicker.Stop()
+
+	for frameNum := 0; config.numOfFrames <= 0 || frameNum < config.numOfFrames; {
+		<-fpsTicker.C
 		select {
 		case err := <-config.gameProcessDone:
 			fmt.Printf("Game CRASHED at frame %d! Error: %v\n", frameNum, err)
@@ -218,7 +257,7 @@ func loopingForFrames(config FrameLooperConfig) bool {
 		default:
 		}
 
-		if time.Since(lastFrameTime) > 2*time.Second {
+		if time.Since(lastFrameTime) > KeyFrameInterval {
 
 			fmt.Printf("Game stopped producing frames at %d (hang/deadlock detected)\n", frameNum)
 			return true
@@ -234,7 +273,8 @@ func loopingForFrames(config FrameLooperConfig) bool {
 
 		frame, isNew := config.gameClient.TryReadFrame()
 		if !isNew {
-			time.Sleep(1 * time.Millisecond)
+			// commented here assuming that we have the ticker for 30 FPS cap
+			// time.Sleep(1 * time.Millisecond)
 			continue
 		}
 
@@ -254,8 +294,9 @@ func loopingForFrames(config FrameLooperConfig) bool {
 		// just some prefix length framing right here
 		payload := packetBuilder.Bytes()
 		payloadLen := uint32(len(payload))
-		n, _ := utils.PutVarint(headerbuff[:], payloadLen)
-		buffers := net.Buffers{headerbuff[:n], payload}
+		headerbuff[0] = 0x02
+		n, _ := utils.PutVarint(headerbuff[1:], payloadLen)
+		buffers := net.Buffers{headerbuff[:n+1], payload}
 		if _, err := buffers.WriteTo(config.conn); err != nil {
 			fmt.Printf("Failed to write frame %d to connection: %v\n", frameNum, err)
 			return false

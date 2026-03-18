@@ -1,4 +1,6 @@
 export interface AppEventMap {
+    [key: string]: (...args: any[]) => void;
+    
     // --- Connection Lifecycle ---
     'connection:connected': () => void;
     'connection:disconnected': () => void;

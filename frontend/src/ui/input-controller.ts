@@ -1,84 +1,93 @@
+import { EventBus, type AppEventMap, type IDisposable } from "../core";
 import type { AppConfig } from "../types";
 
-export class InputController {
+export class InputController implements IDisposable {
     private chatInput: HTMLInputElement;
     private config: AppConfig;
+    private readonly bus: EventBus<AppEventMap>;
+
+
     private standardCommandSet: Set<string>;
     private isOnCooldown = false;
-    private isSystemDisabled = false;
+    private isSystemDisabled = false; // like no feed case
     
     // command history state
+    private readonly MAX_HISTORY_LENGTH = 20;
     private history: string[] =[];
     private historyIndex = -1;
 
-    // callbacks
-    public onValidCommand?: (cmd: string) => void;
-    public onInvalidCommand?: (cmd: string) => void;
-
-    constructor(config: AppConfig) {
+    constructor(bus: EventBus<AppEventMap>, config: AppConfig) {
+        this.bus = bus;
         this.config = config;
         this.standardCommandSet = new Set(config.commands.standard);
         this.chatInput = document.getElementById("chat-input") as HTMLInputElement;
-        this.setupInputListener();
+        this.chatInput.addEventListener('keydown', this.handleKeyDown);
     }
     
+    /**
+     * Updates the allowed command sets when server configuration changes.
+     */
     public updateConfig(config: AppConfig) { 
         this.config = config; 
         this.standardCommandSet = new Set(config.commands.standard); 
     }
 
+    /**
+     * Toggles the input field state based on global system connection status.
+     */
     public setSystemDisabled(disabled: boolean, placeholderMessage: string = "Enter command (!w, !jump, etc)...") {
         this.isSystemDisabled = disabled;
         if (disabled) {
             this.chatInput.disabled = true;
             this.chatInput.placeholder = placeholderMessage;
         } else if (!this.isOnCooldown) {
-            // Only enable it if we aren't currently serving a spam cooldown
+            // only enable it if we are not currently serving a spam cooldown
             this.chatInput.disabled = false;
             this.chatInput.placeholder = placeholderMessage;
         }
     }
 
-    private setupInputListener() {
-        this.chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                if (this.isOnCooldown || this.isSystemDisabled) return;
-                
-                const msg = this.chatInput.value.trim().toLowerCase();
-                if (msg) {
-                    if (this.isValidCommand(msg)) {
-                        // Push to history
-                        this.history.push(msg);
-                        if (this.history.length > 20) this.history.shift();
-                        this.historyIndex = this.history.length;
-                        
-                        this.onValidCommand?.(msg);
-                        this.triggerCooldown();
-                    } else {
-                        this.onInvalidCommand?.(msg);
-                    }
-                    this.chatInput.value = '';
-                }
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (this.history.length > 0 && this.historyIndex > 0) {
-                    this.historyIndex--;
-                    this.chatInput.value = this.history[this.historyIndex];
-                }
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (this.historyIndex < this.history.length - 1) {
-                    this.historyIndex++;
-                    this.chatInput.value = this.history[this.historyIndex];
-                } else {
+    public dispose(): void {
+        this.chatInput.removeEventListener('keydown', this.handleKeyDown);
+    }
+
+    private handleKeyDown = (e: KeyboardEvent): void => {
+        if (e.key === 'Enter') {
+            if (this.isOnCooldown || this.isSystemDisabled) return;
+            
+            const msg = this.chatInput.value.trim().toLowerCase();
+            if (msg) {
+                if (this.isValidCommand(msg)) {
+                    this.history.push(msg);
+                    if (this.history.length > this.MAX_HISTORY_LENGTH) this.history.shift();
                     this.historyIndex = this.history.length;
-                    this.chatInput.value = '';
+                    
+                    this.bus.emit('input:command_valid', msg);
+                    this.triggerCooldown();
+                } else {
+                    this.bus.emit('input:command_invalid', msg);
                 }
-            } else if (e.key === 'Escape') {
                 this.chatInput.value = '';
-                this.historyIndex = this.history.length;
             }
-        });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (this.history.length > 0 && this.historyIndex > 0) {
+                this.historyIndex--;
+                this.chatInput.value = this.history[this.historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (this.historyIndex < this.history.length - 1) {
+                this.historyIndex++;
+                this.chatInput.value = this.history[this.historyIndex];
+            } else {
+                this.historyIndex = this.history.length;
+                this.chatInput.value = '';
+            }
+        } else if (e.key === 'Escape') {
+            this.chatInput.value = '';
+            this.historyIndex = this.history.length;
+        }
     }
 
     private isValidCommand(cmd: string): boolean {

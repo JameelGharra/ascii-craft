@@ -1,17 +1,22 @@
 export class ChatUI {
-    private chatLog: HTMLDivElement;
-    private maxMessages: number;
+    private readonly chatLog: HTMLDivElement;
+    private readonly maxMessages: number;
 
     constructor(maxMessages: number) {
         this.maxMessages = maxMessages;
         this.chatLog = document.getElementById("chat-log") as HTMLDivElement;
     }
 
+    /**
+     * Appends a new chat message to the log and auto-scrolls to the bottom.
+     * @param sender The name of the sender (e.g., 'System', 'You')
+     * @param message The message content
+     * @param cssClass The CSS class to apply to the sender for styling
+     */
     public appendChat(sender: string, message: string, cssClass: string) {
         const el = document.createElement("div");
         el.className = "chat-msg";
 
-        // Add Timestamp
         const time = new Date().toLocaleTimeString('en-US', { hour12: false });
         const timeSpan = document.createElement("span");
         timeSpan.className = "time";

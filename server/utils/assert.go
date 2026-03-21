@@ -30,10 +30,12 @@ func formatAssertMsg(msg string, args ...any) {
 	for _, item := range args {
 		fmt.Printf("%v ", stringify(item))
 	}
+	fmt.Println()
 }
 
 func Assert(truth bool, message string, args ...any) {
 	if !truth {
 		formatAssertMsg(message, args)
+		panic("assertion failed: " + message)
 	}
 }

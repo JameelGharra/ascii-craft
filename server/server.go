@@ -22,17 +22,6 @@ import (
 // producing the protocol constants before running
 //go:generate go run tools/gen_protocol/main.go
 
-const (
-	TotalFrames      = 0 // 0 for infinite frames
-	BinaryPath       = "../game/craft.exe"
-	Stride           = 1
-	RefreshRate      = 120 // after how much frames to send key frame (i-frame)
-	BotMode          = 0   // rng based cmds
-	ControlledMode   = 1
-	FrameInterval    = time.Second / 60 // capping it so it wont ruin the browser
-	KeyFrameInterval = 2 * time.Second  // keyframe refresh
-)
-
 var commandMap = map[string]uint32{
 	"!w":            ipc.CmdForward,
 	"!s":            ipc.CmdBackward,

@@ -22,7 +22,7 @@ type EncodingFrame struct {
 	FinalSize  int // this one should include meta overhaed and not only length of bitstream
 	Stride     int
 	IsKeyFrame bool // whether it is an I-frame or P-frame
-	Encoding   byte
+	Encoding   EncodingType
 }
 
 func NewEncodingFrame(size, stride int) *EncodingFrame {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -39,34 +38,6 @@ var commandMap = map[string]uint32{
 	"!jumpbackward": ipc.CmdJumpBackward,
 	"!jumpleft":     ipc.CmdJumpLeft,
 	"!jumpright":    ipc.CmdJumpRight,
-}
-
-func dynamicHandshake(conn net.Conn, width, height int) {
-	gameConfig := map[string]interface{}{
-		"video": map[string]int{
-			"width":  width,
-			"height": height,
-		},
-		"commands": map[string]interface{}{
-			"standard": []string{
-				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy",
-				"!turnleft", "!turnright", "!lookup", "!lookdown",
-				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright",
-			},
-			"parameterized": map[string]interface{}{
-				"!slot": map[string]int{"min": 0, "max": 9},
-			},
-		},
-	}
-	configBytes, _ := json.Marshal(gameConfig)
-
-	// Frame format:[Type (1 byte)] [Varint Len] [Data]
-	var header [10]byte
-	header[0] = 0x01 // 0x01 = Handshake
-	n, _ := utils.PutVarint(header[1:], uint32(len(configBytes)))
-	conn.Write(header[:n+1])
-	conn.Write(configBytes)
-
 }
 
 func main() {

@@ -1,8 +1,8 @@
 export * from "./protocol_constants"; // have to gen it with go
 
 export class BinaryReader {
-    private view: DataView;
-    private buffer: Uint8Array;
+    private readonly view: DataView;
+    private readonly buffer: Uint8Array;
     private offset: number;
 
     constructor(buffer: ArrayBuffer) {
@@ -10,13 +10,17 @@ export class BinaryReader {
         this.view = new DataView(buffer);
         this.offset = 0;
     }
-    readByte(): number {
+
+    /** Reads a single 8-bit unsigned integer. */
+    public readByte(): number {
         if (this.offset >= this.buffer.length) {
             throw new Error("Protocol Error: Buffer overflow reading byte");
         }
         return this.view.getUint8(this.offset++);
     }
-    readSlice(length: number): Uint8Array {
+    
+    /** Returns a subarray reference of the specified length. */
+    public readSlice(length: number): Uint8Array {
         if (this.offset + length > this.buffer.length) {
             throw new Error(`Protocol Error: Buffer overflow reading slice of length ${length}`);
         }
@@ -24,7 +28,9 @@ export class BinaryReader {
         this.offset += length;
         return slice;
     }
-    readVarint(): number {
+    
+    /** Decodes an unsigned LEB128 Varint. */
+    public readVarint(): number {
         let res = 0;
         let shift = 0;
         while(true) {
@@ -41,12 +47,15 @@ export class BinaryReader {
         }
         return res >>> 0; // forcing js to treat res as u32int
     }
-    readRemaining(): Uint8Array {
+    
+    /** Returns a subarray containing all remaining bytes in the buffer. */
+    public readRemaining(): Uint8Array {
         const slice = this.buffer.subarray(this.offset);
         this.offset = this.buffer.length;
         return slice;
     }
-    hasMore(): boolean {
+
+    public hasMore(): boolean {
         return this.offset < this.buffer.length;
     }
 }

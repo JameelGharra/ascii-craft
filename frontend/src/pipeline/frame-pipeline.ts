@@ -5,16 +5,17 @@ import { BinaryReader, FLAG_IS_COMPRESSED, FLAG_IS_DELTA, FLAG_METHOD, SHIFT_TAB
 import { Renderer } from "../renderer";
 
 export class FramePipeline {
-    private renderer: Renderer;
-    private huffman: HuffmanDecoder;
-    private metrics: MetricsCollector;
-    private prevFrame: Uint8Array;
-    private currFrame: Uint8Array;
+    private readonly renderer: Renderer;
+    private readonly huffman: HuffmanDecoder;
+    private readonly metrics: MetricsCollector;
+    private readonly prevFrame: Uint8Array;
+    private readonly currFrame: Uint8Array;
     
     private totalPixels: number;
     private lastSeq: number = -1;
     private hasReceivedKeyFrame = false;
     private pendingRender: boolean = false;
+    private animationFrameId: number | null = null;
 
 
     private setupRenderingLoop() {
@@ -23,9 +24,9 @@ export class FramePipeline {
                 this.renderer.render(this.currFrame);
                 this.pendingRender = false;
             }
-            requestAnimationFrame(renderLoop);
+            this.animationFrameId = requestAnimationFrame(renderLoop);
         };
-        requestAnimationFrame(renderLoop);
+        this.animationFrameId = requestAnimationFrame(renderLoop);
     }
 
     constructor(canvasId: string, width: number, height: number, metrics: MetricsCollector) {
@@ -122,6 +123,13 @@ export class FramePipeline {
         } catch(err) {
             console.error("Frame pipeline encountered a decoding error:", err);
             this.hasReceivedKeyFrame = false;
+        }
+    }
+
+    public dispose(): void {
+        if (this.animationFrameId !== null) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
         }
     }
 }

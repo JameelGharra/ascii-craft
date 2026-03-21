@@ -1,11 +1,13 @@
 import { ConnectionManager } from "../network/connection-manager";
+import { type IDisposable } from "../core";
 
-export class LatencyTracker {
-    private pingInterval: number | null = null;
-    private smoothedRtt: number = 0;
+export class LatencyTracker implements IDisposable {
     private static readonly ALPHA = 0.3; // smoothing factor from 0.0 to 1.0
     private static readonly PING_INTERVAL_MS = 3000;
-    private connectionManager: ConnectionManager;
+    
+    private readonly connectionManager: ConnectionManager;
+    private pingInterval: number | null = null;
+    private smoothedRtt: number = 0;
 
     constructor(connectionManager: ConnectionManager) {
         this.connectionManager = connectionManager;
@@ -40,5 +42,9 @@ export class LatencyTracker {
 
     public getLatency(): number {
         return this.smoothedRtt;
+    }
+
+    public dispose() {
+        this.stop();
     }
 }

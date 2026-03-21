@@ -40,7 +40,7 @@ export function isValidAppConfig(data: any): data is AppConfig {
         return false;
     }
 
-    // paramterized
+    // parameterized
     for (const key in data.commands.parameterized) {
         const bounds = data.commands.parameterized[key];
         if (!bounds || typeof bounds.min !== 'number' || typeof bounds.max !== 'number') {

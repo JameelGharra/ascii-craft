@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"time"
 
@@ -94,7 +95,7 @@ func (r *RelayConnection) StartCommandReader(dispatcher *CommandDispatcher) {
 			dispatcher.Dispatch(cmdStr)
 		}
 		if err := scanner.Err(); err != nil {
-			fmt.Printf("Relay connection error: %v\n", err)
+			slog.Error("Relay command reader failed", "error", err)
 		}
 	}()
 }

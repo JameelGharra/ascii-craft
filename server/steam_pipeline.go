@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -87,8 +88,13 @@ func (s *StreamPipeline) Run(ctx context.Context, client *ipc.Client, conn *Rela
 		isKeyFrame := frameNum%s.config.RefreshRate == 0
 		result := s.enc.PushFrame(s.frameBuf, isKeyFrame)
 
-		fmt.Printf("Frame %d: Original=%d bytes, Compressed (Best)=%d bytes - Type: (%v)\n",
-			frameNum, len(s.frameBuf), result.FinalSize, result.Encoding)
+		slog.Info("frame encoded",
+			"frame_num", frameNum,
+			"original_bytes", len(s.frameBuf),
+			"compressed_bytes", result.FinalSize,
+			"encoding", result.Encoding.String(),
+			"is_keyframe", isKeyFrame,
+		)
 
 		packetBuilder.Reset()
 		if err := s.enc.WriteTo(packetBuilder); err != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,7 +69,7 @@ func (g *GameProcess) Done() <-chan error {
 func (g *GameProcess) Kill() {
 	if g.cmd != nil && g.cmd.Process != nil {
 		if g.cmd.ProcessState == nil || !g.cmd.ProcessState.Exited() {
-			fmt.Println("Stopping game process...")
+			slog.Info("Stopping game process")
 			g.cmd.Process.Kill()
 		}
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +16,8 @@ import (
 //go:generate go run tools/gen_protocol/main.go
 
 func main() {
-	fmt.Println("Starting ASCII-Craft stream server...")
+	InitLogger()
+	slog.Info("Starting ASCII-Craft stream server")
 	cfg := DefaultConfig()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -25,20 +27,20 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("\nInterrupt received, initiating graceful shutdown...")
+		slog.Warn("Interrupt received, initiating graceful shutdown")
 		cancel()
 	}()
 	game, err := NewGameProcess(cfg)
 	if err != nil {
-		fmt.Printf("Failed to launch game process %v\n", err)
+		slog.Error("failed to launch game process", "error", err)
 		return
 	}
 	defer game.Kill()
 
-	fmt.Println("Game launched. Now connecting to IPC...")
+	slog.Info("Game launched. Now connecting to IPC")
 	ipcClient, err := game.WaitForIPC(ctx)
 	if err != nil {
-		fmt.Printf("IPC connection failed: %v\n", err)
+		slog.Error("IPC connection failed", "error", err)
 		return
 	}
 	defer ipcClient.Close()
@@ -46,23 +48,23 @@ func main() {
 	// gonna wait for first frame for resolution
 	frame, _ := waitForFirstFrame(ctx, ipcClient, game.Done())
 	width, height := int(frame.Width), int(frame.Height)
-	fmt.Printf("First frame received. Resolution: %dx%d\n", width, height)
+	slog.Info("first frame received", "width", width, "height", height)
 
 	pipeline := NewStreamPipeline(width, height, cfg)
 	dispatcher := NewCommandDispatcher(ipcClient)
 	const retryDelaySeconds = 2
 	for {
-		fmt.Println("Connecting to relay...")
+		slog.Info("connecting to relay", "address", cfg.RelayAddr)
 		relay, err := DialRelay(ctx, cfg.RelayAddr, width, height)
 		if err != nil {
 			if ctx.Err() != nil {
 				return // prolly a ctrl+c
 			}
-			fmt.Printf("Relay connection failed: %v. Retrying in %ds\n", err, retryDelaySeconds)
+			slog.Warn("relay connection failed", "error", err, "retry_delay_seconds", retryDelaySeconds)
 			time.Sleep(retryDelaySeconds * time.Second)
 			continue
 		}
-		fmt.Println("Connected to relay. Starting stream...")
+		slog.Info("Connected to relay. Starting stream...")
 		relay.StartCommandReader(dispatcher)
 
 		err = pipeline.Run(ctx, ipcClient, relay, game.Done()) // blocky
@@ -70,15 +72,15 @@ func main() {
 		relay.Close()
 
 		if err != nil {
-			fmt.Printf("Pipeline stopped: %v\n", err)
+			slog.Error("Pipeline stopped", "error", err)
 			// if it is a game crash or a ctx cancellation => no retrying
 			if ctx.Err() != nil || err.Error() == "game crashed" {
 				return
 			}
-			fmt.Printf("Retrying relay connection in %ds...\n", retryDelaySeconds)
+			slog.Info("Retrying relay connection..", "retry_delay_seconds", retryDelaySeconds)
 			time.Sleep(retryDelaySeconds * time.Second)
 		} else {
-			fmt.Println("Stream completed requested frames.")
+			slog.Info("Stream completed requested frames.")
 			return
 		}
 	}

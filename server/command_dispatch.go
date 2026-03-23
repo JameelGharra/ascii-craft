@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -56,8 +56,8 @@ func (d *CommandDispatcher) Dispatch(rawCmd string) {
 
 	if cmdType, exists := d.commands[rawCmd]; exists {
 		d.client.WriteCommand(cmdType, ipc.IgnoredDefaultValue)
-		fmt.Printf("Executed remote command: %s\n", rawCmd)
+		slog.Info("Executed remote command", "command", rawCmd, "type", cmdType)
 	} else {
-		fmt.Printf("Unknown command received: %s\n", rawCmd)
+		slog.Warn("Unknown command received", "command", rawCmd)
 	}
 }

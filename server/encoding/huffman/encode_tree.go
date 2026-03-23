@@ -9,8 +9,6 @@ import (
 
 var ErrHuffmanEmptyFrame = errors.New("huffman encoding on empty frame")
 
-// const HuffmanEncodeLength = 6
-
 func buildEncodeTree(freq *ascii.FreqTable) (*HuffmanNode, error) {
 	if freq.TotalDifferentChars == 0 {
 		return nil, ErrHuffmanEmptyFrame

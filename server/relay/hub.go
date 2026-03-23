@@ -1,10 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"time"
-
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -13,13 +11,6 @@ const (
 	commandBufferSize    = 256
 	gameCmdsBufferSize   = 10
 )
-
-type Client struct {
-	hub       *Hub
-	conn      *websocket.Conn
-	sendVideo chan []byte
-	sendText  chan string
-}
 
 type clientCommand struct { // mainly to add 1 user = 1 vote support
 	client *Client
@@ -94,7 +85,11 @@ func (h *Hub) Run() {
 			tally.Record(cmdClient.client, cmdClient.cmd)
 
 		case <-viewerTicker.C:
-			viewerMsg := fmt.Sprintf(`{"type":"viewers", "count":%d}`, len(h.clients))
+			msgBytes, _ := json.Marshal(map[string]any{
+				"type":  "viewers",
+				"count": len(h.clients),
+			})
+			viewerMsg := string(msgBytes)
 			for client := range h.clients {
 				select {
 				case client.sendText <- viewerMsg:
@@ -105,7 +100,12 @@ func (h *Hub) Run() {
 			if tally.HasVotes() {
 				winner, maxVotes := tally.Winner()
 				tally.Reset()
-				announcement := fmt.Sprintf(`{"type":"vote", "command":"%s", "votes":%d}`, winner, maxVotes)
+				msgBytes, _ := json.Marshal(map[string]any{
+					"type":    "vote",
+					"command": winner,
+					"votes":   maxVotes,
+				})
+				announcement := string(msgBytes)
 
 				for client := range h.clients {
 					select {
@@ -117,39 +117,6 @@ func (h *Hub) Run() {
 				case h.gameCmds <- winner:
 				default:
 				}
-			}
-		}
-	}
-}
-
-func (c *Client) writePump() {
-	defer func() {
-		c.hub.unregister <- c
-		c.conn.Close()
-	}()
-
-	for {
-		select {
-		// Wait for a packet specifically for THIS user
-		case packet, ok := <-c.sendVideo:
-			if !ok {
-				// The Hub closed the channel, time to disconnect
-				return
-			}
-
-			// This is where the actual network waiting happens.
-			// It only blocks THIS client's goroutine.
-			err := c.conn.WriteMessage(websocket.BinaryMessage, packet)
-			if err != nil {
-				return
-			}
-		case text, ok := <-c.sendText:
-			if !ok {
-				return
-			}
-			err := c.conn.WriteMessage(websocket.TextMessage, []byte(text))
-			if err != nil {
-				return
 			}
 		}
 	}

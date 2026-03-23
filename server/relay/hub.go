@@ -56,7 +56,7 @@ func (h *Hub) Run() {
 
 	voteTicker := time.NewTicker(voteTickerInterval)
 	defer voteTicker.Stop()
-	votes := make(map[*Client]string)
+	tally := NewVoteTally()
 
 	for {
 		select {
@@ -91,9 +91,8 @@ func (h *Hub) Run() {
 				}
 			}
 		case cmdClient := <-h.commands:
-			if _, alreadyVoted := votes[cmdClient.client]; !alreadyVoted {
-				votes[cmdClient.client] = cmdClient.cmd
-			}
+			tally.Record(cmdClient.client, cmdClient.cmd)
+
 		case <-viewerTicker.C:
 			viewerMsg := fmt.Sprintf(`{"type":"viewers", "count":%d}`, len(h.clients))
 			for client := range h.clients {
@@ -103,20 +102,9 @@ func (h *Hub) Run() {
 				}
 			}
 		case <-voteTicker.C:
-			if len(votes) > 0 {
-				tally := make(map[string]int)
-				for _, cmd := range votes {
-					tally[cmd]++
-				}
-				winner := ""
-				maxVotes := 0
-				for cmd, count := range tally {
-					if count > maxVotes {
-						maxVotes = count
-						winner = cmd
-					}
-				}
-				votes = make(map[*Client]string)
+			if tally.HasVotes() {
+				winner, maxVotes := tally.Winner()
+				tally.Reset()
 				announcement := fmt.Sprintf(`{"type":"vote", "command":"%s", "votes":%d}`, winner, maxVotes)
 
 				for client := range h.clients {

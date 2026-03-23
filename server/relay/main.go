@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -48,24 +50,26 @@ type ConfigManager struct {
 	config AppConfig
 }
 
-var globalConfig = &ConfigManager{
-	config: AppConfig{
-		// Default Relay UX settings
-		Chat: struct {
-			CooldownMs  int `json:"cooldown_ms"`
-			MaxMessages int `json:"max_messages"`
-		}{CooldownMs: 500, MaxMessages: 35},
-		// Safe defaults just in case UI fetches before game connects
-		Video: struct {
-			Width  uint32 `json:"width"`
-			Height uint32 `json:"height"`
-		}{Width: 212, Height: 66},
-		// these just to make sure that we live even gameserver off
-		Commands: map[string]interface{}{
-			"standard":      []string{},
-			"parameterized": map[string]any{},
+func NewDefaultConfigManager() *ConfigManager {
+	return &ConfigManager{
+		config: AppConfig{
+			// Default Relay UX settings
+			Chat: struct {
+				CooldownMs  int `json:"cooldown_ms"`
+				MaxMessages int `json:"max_messages"`
+			}{CooldownMs: 500, MaxMessages: 35},
+			// Safe defaults just in case UI fetches before game connects
+			Video: struct {
+				Width  uint32 `json:"width"`
+				Height uint32 `json:"height"`
+			}{Width: 212, Height: 66},
+			// these just to make sure that we live even gameserver off
+			Commands: map[string]interface{}{
+				"standard":      []string{},
+				"parameterized": map[string]any{},
+			},
 		},
-	},
+	}
 }
 
 func (cm *ConfigManager) UpdateGameConfig(width, height uint32, commands map[string]interface{}) {
@@ -150,7 +154,7 @@ func handleWebSocket(hub *Hub, w http.ResponseWriter, r *http.Request) {
 }
 
 // Start the TCP server in a blocking way or a goroutine
-func startTCPServer(hub *Hub) {
+func startTCPServer(hub *Hub, cm *ConfigManager) {
 	// 1. Listen on a raw TCP port
 	listener, err := net.Listen("tcp", ":9000")
 	if err != nil {
@@ -172,11 +176,11 @@ func startTCPServer(hub *Hub) {
 		// 3. Handle the connection
 		// We use a Goroutine so if you restart the game,
 		// the relay can accept the new connection without restarting.
-		go handleGameConnection(conn, hub)
+		go handleGameConnection(conn, hub, cm)
 	}
 }
 
-func handleGameConnection(conn net.Conn, hub *Hub) {
+func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 	defer conn.Close()
 	log.Println("Game Engine Connected!")
 
@@ -232,7 +236,7 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 				Commands map[string]interface{} `json:"commands"`
 			}
 			if err := json.Unmarshal(packet, &incoming); err == nil {
-				globalConfig.UpdateGameConfig(incoming.Video.Width, incoming.Video.Height, incoming.Commands)
+				cm.UpdateGameConfig(incoming.Video.Width, incoming.Video.Height, incoming.Commands)
 				log.Printf("Game Config Updated: %dx%d", incoming.Video.Width, incoming.Video.Height)
 				// Tell all frontend clients to reload their config
 				hub.broadcastText <- `{"type":"reload_config"}`
@@ -243,32 +247,38 @@ func handleGameConnection(conn net.Conn, hub *Hub) {
 			// This sends the raw bytes to the broadcast channel.
 			// The Hub will pick this up and fan it out to the 1000 websockets.
 			hub.broadcast <- packet
-			fmt.Printf("Received packet (%d): %d bytes\n", packetCount, len(packet))
+			slog.Info("Received packet", "count", packetCount, "size", len(packet))
 			packetCount++
 		}
 	}
 }
 
-func handleConfig(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(globalConfig.GetJSON())
+func handleConfig(cm *ConfigManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(cm.GetJSON())
+	}
 }
 
 func main() {
-	fmt.Println("--- Starting ASCII Craft Relay ---")
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, opts)))
+
+	slog.Info("--- Starting ASCII Craft Relay ---")
 
 	// create and start the hub
 	// the hub runs in its own background thread (goroutine)
+	cm := NewDefaultConfigManager()
 	hub := NewHub()
 	go hub.Run()
 
 	// start the TCP Server (game ingest)
 	// we run this in a goroutine so it doesn't block the HTTP server below
-	go startTCPServer(hub)
+	go startTCPServer(hub, cm)
 
 	// config endpoint
-	http.HandleFunc("/api/config", handleConfig)
+	http.HandleFunc("/api/config", handleConfig(cm))
 
 	// configure the HTTP route for websockets
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -277,11 +287,10 @@ func main() {
 
 	// start the HTTP Server (User Connections)
 	// this blocks the main thread forever (keeping the program alive)
-	fmt.Println(" -> TCP Listening on :9000 (Game Engine)")
-	fmt.Println(" -> HTTP Listening on :8080 (Web Clients)")
+	slog.Info("TCP Listening for game engine", "port", 9000)
+	slog.Info("HTTP Listening for users", "port", 8080)
 
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal("HTTP Server failed:", err)
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		slog.Error("HTTP Server failed", "error", err)
 	}
 }

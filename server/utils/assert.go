@@ -35,7 +35,7 @@ func formatAssertMsg(msg string, args ...any) {
 
 func Assert(truth bool, message string, args ...any) {
 	if !truth {
-		formatAssertMsg(message, args)
+		formatAssertMsg(message, args...)
 		panic("assertion failed: " + message)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -129,7 +128,7 @@ func handleWebSocket(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	// 1. Upgrade HTTP to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("WS Upgrade error:", err)
+		slog.Error("WS upgrade error", "error", err)
 		return
 	}
 
@@ -158,18 +157,18 @@ func startTCPServer(hub *Hub, cm *ConfigManager) {
 	// 1. Listen on a raw TCP port
 	listener, err := net.Listen("tcp", ":9000")
 	if err != nil {
-		log.Fatalf("Error starting TCP server: %v", err)
+		slog.Error("Error starting TCP server", "error", err)
 	}
 	defer listener.Close()
 
-	log.Println("TCP Game Ingest listening on :9000")
+	slog.Info("TCP game ingest listening", "port", 9000)
 
 	for {
 		// 2. Accept new connections
 		// This blocks until your Game Engine calls connect()
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Println("TCP Accept error:", err)
+			slog.Error("TCP accept error", "error", err)
 			continue
 		}
 
@@ -182,7 +181,7 @@ func startTCPServer(hub *Hub, cm *ConfigManager) {
 
 func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 	defer conn.Close()
-	log.Println("Game Engine Connected!")
+	slog.Info("game engine connected!")
 
 	// context to cleanly kill the writer goroutine if game connection drops
 	ctx, cancel := context.WithCancel(context.Background())
@@ -197,7 +196,7 @@ func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 			case cmd := <-hub.gameCmds:
 				_, err := fmt.Fprintf(conn, "%s\n", cmd)
 				if err != nil {
-					log.Println("Failed to write command to game server:", err)
+					slog.Error("failed to write command to game server", "error", err)
 					return
 				}
 			}
@@ -213,7 +212,7 @@ func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 
 		packetType, err := reader.ReadByte()
 		if err != nil {
-			log.Println("Game Engine Disconnected:", err)
+			slog.Error("game engine disconnected", "error", err)
 			return
 		}
 
@@ -221,7 +220,7 @@ func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 		packet, err := ReadFullPacket(reader, reader) // i know sounds like a typo but its not
 		if err != nil {
 			// If err is EOF, the game crashed or closed.
-			log.Println("Game Engine Disconnected:", err)
+			slog.Error("Game Engine Disconnected", "error", err)
 			return
 		}
 
@@ -237,7 +236,7 @@ func handleGameConnection(conn net.Conn, hub *Hub, cm *ConfigManager) {
 			}
 			if err := json.Unmarshal(packet, &incoming); err == nil {
 				cm.UpdateGameConfig(incoming.Video.Width, incoming.Video.Height, incoming.Commands)
-				log.Printf("Game Config Updated: %dx%d", incoming.Video.Width, incoming.Video.Height)
+				slog.Info("Game Config Updated", "width", incoming.Video.Width, "height", incoming.Video.Height)
 				// Tell all frontend clients to reload their config
 				hub.broadcastText <- `{"type":"reload_config"}`
 			}

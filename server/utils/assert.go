@@ -19,7 +19,7 @@ func stringify(item any) string {
 		return fmt.Sprintf("%d", item)
 	default:
 		d, err := json.Marshal(t)
-		if err != nil {
+		if err == nil {
 			return string(d)
 		}
 	}

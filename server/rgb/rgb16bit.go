@@ -18,7 +18,7 @@ func Scale16BitToTrueColor(r, g, b uint8) (uint8, uint8, uint8) {
 
 // pack into two bytes
 func RGBToColor16Bit(originalR, originalG, originalB uint8) uint16 {
-	r, g, b := RGBToColor8BitANSII(originalR, originalG, originalB)
+	r, g, b := RGBToColor16BitANSII(originalR, originalG, originalB)
 	return (uint16(r) << 11) | (uint16(g) << 5) | uint16(b)
 }
 

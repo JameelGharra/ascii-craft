@@ -4,13 +4,13 @@ import (
 	"errors"
 
 	"github.com/JameelGharra/ascii-craft/server/ascii"
-	"github.com/JameelGharra/ascii-craft/server/encoding"
 	"github.com/JameelGharra/ascii-craft/server/encoding/huffman"
+	"github.com/JameelGharra/ascii-craft/server/encoding/rle"
 	"github.com/JameelGharra/ascii-craft/server/protocol"
 )
 
 type EncodingFrame struct {
-	RLE  encoding.AsciiRLE
+	RLE  rle.AsciiRLE
 	Freq ascii.FreqTable
 	Huff *huffman.Huffman
 
@@ -27,7 +27,7 @@ type EncodingFrame struct {
 
 func NewEncodingFrame(size, stride int) *EncodingFrame {
 	return &EncodingFrame{
-		RLE:       *encoding.NewAsciiRLE(),
+		RLE:       *rle.NewAsciiRLE(),
 		Huff:      nil,
 		Out:       make([]byte, size),
 		Len:       0,

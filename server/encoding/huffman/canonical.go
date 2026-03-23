@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/JameelGharra/ascii-craft/server/encoding"
+	"github.com/JameelGharra/ascii-craft/server/encoding/rle"
 )
 
 const (
@@ -81,12 +81,12 @@ const (
 )
 
 var (
-	ErrInvalidCanonicalTable                    = errors.New("invalid canonical table, cannot be packed")
-	ErrEmptyCanonicalTable                      = errors.New("empty canonical table provided")
-	tableRLEBuffer           []byte             = make([]byte, canonicalTableRawSize)
-	tableSparseBuffer        []byte             = make([]byte, canonicalTableRawSize) // wont bother using if input not half of raw so its ok
-	tableRawBuffer           []byte             = make([]byte, canonicalTableRawSize)
-	RLEEncoder               *encoding.AsciiRLE = encoding.NewAsciiRLE()
+	ErrInvalidCanonicalTable               = errors.New("invalid canonical table, cannot be packed")
+	ErrEmptyCanonicalTable                 = errors.New("empty canonical table provided")
+	tableRLEBuffer           []byte        = make([]byte, canonicalTableRawSize)
+	tableSparseBuffer        []byte        = make([]byte, canonicalTableRawSize) // wont bother using if input not half of raw so its ok
+	tableRawBuffer           []byte        = make([]byte, canonicalTableRawSize)
+	RLEEncoder               *rle.AsciiRLE = rle.NewAsciiRLE()
 )
 
 // it picks the best strategy out of the meta modes and pack accordingly

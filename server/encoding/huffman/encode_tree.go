@@ -9,8 +9,6 @@ import (
 
 var ErrHuffmanEmptyFrame = errors.New("huffman encoding on empty frame")
 
-// const HuffmanEncodeLength = 6
-
 func buildEncodeTree(freq *ascii.FreqTable) (*HuffmanNode, error) {
 	if freq.TotalDifferentChars == 0 {
 		return nil, ErrHuffmanEmptyFrame
@@ -43,41 +41,3 @@ func buildEncodeTree(freq *ascii.FreqTable) (*HuffmanNode, error) {
 	head := heap.Pop(&nodes).(*HuffmanNode)
 	return head, nil
 }
-
-// func serializeTree(node *HuffmanNode, data *[]byte, res *HuffmanEncodeResultTable, index int) int { // zero waste space strategy
-// 	if node == nil {
-// 		return index
-// 	}
-
-// 	utils.Assert(index+5 < len(*data), "Index will exceed data length.")
-
-// 	if node.left == nil && node.right == nil {
-// 		res.Update(node.value)
-// 	}
-
-// 	leftIndex := index + HuffmanEncodeLength
-
-// 	utils.Write16(*data, index, node.value)
-
-// 	leftFieldStart := index + sizePerNodeField
-// 	rightFieldStart := leftFieldStart + sizePerNodeField
-// 	utils.Write16(*data, leftFieldStart, 0)
-// 	utils.Write16(*data, rightFieldStart, 0)
-
-// 	next := leftIndex
-
-// 	if node.left != nil {
-// 		utils.Write16(*data, leftFieldStart, leftIndex)
-// 		res.Left()
-// 		next = serializeTree(node.left, data, res, leftIndex)
-// 		res.Back()
-// 	}
-
-// 	if node.right != nil {
-// 		utils.Write16(*data, rightFieldStart, next)
-// 		res.Right()
-// 		next = serializeTree(node.right, data, res, next)
-// 		res.Back()
-// 	}
-// 	return next
-// }

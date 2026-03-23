@@ -19,7 +19,7 @@ func stringify(item any) string {
 		return fmt.Sprintf("%d", item)
 	default:
 		d, err := json.Marshal(t)
-		if err != nil {
+		if err == nil {
 			return string(d)
 		}
 	}
@@ -30,10 +30,12 @@ func formatAssertMsg(msg string, args ...any) {
 	for _, item := range args {
 		fmt.Printf("%v ", stringify(item))
 	}
+	fmt.Println()
 }
 
 func Assert(truth bool, message string, args ...any) {
 	if !truth {
-		formatAssertMsg(message, args)
+		formatAssertMsg(message, args...)
+		panic("assertion failed: " + message)
 	}
 }

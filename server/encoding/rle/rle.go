@@ -1,4 +1,4 @@
-package encoding
+package rle
 
 import (
 	"errors"

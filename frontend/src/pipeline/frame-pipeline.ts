@@ -3,14 +3,21 @@ import { decodeRLE } from '../decoder/rle';
 import type { MetricsCollector } from '../metrics/metrics-collector';
 import { BinaryReader, FLAG_IS_COMPRESSED, FLAG_IS_DELTA, FLAG_METHOD, SHIFT_TABLE_MODE, MASK_TABLE_MODE, TABLE_MODE_RAW } from '../protocol';
 import { Renderer } from "../renderer";
+import { AsciiRenderer } from "../ascii-renderer";
 
 export class FramePipeline {
-    private readonly renderer: Renderer;
     private readonly huffman: HuffmanDecoder;
     private readonly metrics: MetricsCollector;
     private readonly prevFrame: Uint8Array;
     private readonly currFrame: Uint8Array;
     
+    private readonly renderer: Renderer;
+    private asciiRenderer: AsciiRenderer | null = null;
+    private asciiMode: boolean = false;
+    private readonly canvas: HTMLCanvasElement;
+    private readonly width: number;
+    private readonly height: number;
+
     private totalPixels: number;
     private lastSeq: number = -1;
     private hasReceivedKeyFrame = false;
@@ -21,7 +28,11 @@ export class FramePipeline {
     private setupRenderingLoop() {
         const renderLoop = () => {
             if (this.pendingRender) {
-                this.renderer.render(this.currFrame);
+                if (this.asciiMode && this.asciiRenderer) {
+                    this.asciiRenderer.render(this.currFrame);
+                } else {
+                    this.renderer.render(this.currFrame);
+                }
                 this.pendingRender = false;
             }
             this.animationFrameId = requestAnimationFrame(renderLoop);
@@ -31,8 +42,11 @@ export class FramePipeline {
 
     constructor(canvasId: string, width: number, height: number, metrics: MetricsCollector) {
         this.totalPixels = width * height;
-        const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-        this.renderer = new Renderer(canvas, width, height);
+        this.width = width;
+        this.height = height;
+        this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+
+        this.renderer = new Renderer(this.canvas, this.width, this.height);
         this.metrics = metrics;
         this.prevFrame = new Uint8Array(this.totalPixels);
         this.currFrame = new Uint8Array(this.totalPixels);
@@ -125,7 +139,25 @@ export class FramePipeline {
             this.hasReceivedKeyFrame = false;
         }
     }
-
+    public setAsciiMode(enabled: boolean) {
+        this.asciiMode = enabled;
+        if (enabled) {
+            if (!this.asciiRenderer) {
+                // Lazy instantiation
+                this.asciiRenderer = new AsciiRenderer(this.canvas, this.width, this.height);
+            } else {
+                // Re-apply physical pixel dimensions and font states
+                this.asciiRenderer.activate();
+            }
+        } else {
+            // Restore original 1:1 pixel rendering dimensions for standard Renderer
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+        }
+        
+        // Force an immediate re-render of the current frame
+        this.pendingRender = true;
+    }
     public dispose(): void {
         if (this.animationFrameId !== null) {
             cancelAnimationFrame(this.animationFrameId);

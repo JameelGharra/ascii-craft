@@ -21,4 +21,7 @@ export interface AppEventMap {
     // --- User Input ---
     'input:command_valid': (cmd: string) => void;
     'input:command_invalid': (cmd: string) => void;
+
+    // --- UI Events ---
+    'ui:ascii_toggle': (enabled: boolean) => void;
 }

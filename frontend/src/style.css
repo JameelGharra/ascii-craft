@@ -326,6 +326,70 @@ canvas {
     color: var(--warning);
     background: rgba(0, 0, 0, 0.85);
 }
+
+/* --- ASCII TOGGLE SWITCH --- */
+.ascii-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    margin-right: 25px; /* Spacing between toggle and resolution badge */
+}
+
+.ascii-toggle-label {
+    font-size: 0.85em;
+    color: var(--secondary);
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.ascii-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+}
+
+.ascii-toggle-input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.ascii-toggle-track {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #0d1a0d;
+    border: 1px solid var(--border);
+    transition: .3s;
+    border-radius: 22px;
+}
+
+.ascii-toggle-track:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--secondary);
+    transition: .3s;
+    border-radius: 50%;
+}
+
+.ascii-toggle-input:checked + .ascii-toggle-track {
+    border-color: var(--primary);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.15); /* CRT Glow */
+}
+
+.ascii-toggle-input:checked + .ascii-toggle-track:before {
+    transform: translateX(22px);
+    background-color: var(--primary);
+    box-shadow: 0 0 8px var(--primary);
+}
+
+
 /* --- RESPONSIVE DESIGN FOR MOBILE --- */
 @media (max-width: 950px) {
     body {

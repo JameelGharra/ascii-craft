@@ -4,3 +4,4 @@ export * from './input-controller';
 export * from './status-header';
 export * from './status-overlay';
 export * from './telemetry-panel';
+export * from './ascii-toggle';

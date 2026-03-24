@@ -9,7 +9,8 @@ import {
     TelemetryPanel, 
     CommandTimeline, 
     ChatUI, 
-    InputController 
+    InputController,
+    AsciiToggle
 } from "./ui";
 
 export class Application implements IDisposable {
@@ -27,6 +28,7 @@ export class Application implements IDisposable {
     private readonly commandTimeline = new CommandTimeline();
     private readonly chatUI: ChatUI;
     private readonly inputController: InputController;
+    private readonly asciiToggle: AsciiToggle;
 
     // Dynamic Components (recreated on config changes)
     private metricsCollector!: MetricsCollector;
@@ -58,7 +60,7 @@ export class Application implements IDisposable {
         // Instantiate UI
         this.chatUI = new ChatUI(this.config.chat.max_messages);
         this.inputController = new InputController(this.bus, this.config);
-
+        this.asciiToggle = new AsciiToggle(this.bus);
         this.setupPipeline(this.config);
         this.bindEvents();
     }
@@ -107,6 +109,9 @@ export class Application implements IDisposable {
         // User Input
         this.bus.on('input:command_valid', this.onCommandValid);
         this.bus.on('input:command_invalid', this.onCommandInvalid);
+
+        // UI
+        this.bus.on('ui:ascii_toggle', (enabled) => this.framePipeline.setAsciiMode(enabled));
     }
 
     // --- Event Handlers (Bound via Arrow Functions to preserve 'this') ---
@@ -197,6 +202,7 @@ export class Application implements IDisposable {
         this.latencyTracker.dispose();
         this.connectionManager.dispose();
         this.inputController.dispose();
+        this.asciiToggle.dispose();
         this.bus.dispose();
     }
 }

@@ -328,12 +328,16 @@ canvas {
 }
 
 /* --- ASCII TOGGLE SWITCH --- */
+.header-right-group {
+    display: flex;
+    align-items: center;
+}
+
 .ascii-toggle-wrapper {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-left: auto;
-    margin-right: 25px; /* Spacing between toggle and resolution badge */
+    margin-right: 15px; /* Spacing between toggle and resolution badge */
 }
 
 .ascii-toggle-label {
@@ -380,7 +384,7 @@ canvas {
 
 .ascii-toggle-input:checked + .ascii-toggle-track {
     border-color: var(--primary);
-    box-shadow: 0 0 10px rgba(0, 255, 65, 0.15); /* CRT Glow */
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.15);
 }
 
 .ascii-toggle-input:checked + .ascii-toggle-track:before {
@@ -388,7 +392,6 @@ canvas {
     background-color: var(--primary);
     box-shadow: 0 0 8px var(--primary);
 }
-
 
 /* --- RESPONSIVE DESIGN FOR MOBILE --- */
 @media (max-width: 950px) {
@@ -449,5 +452,22 @@ canvas {
 
     #chat-log {
         min-height: auto;
+    }
+}
+@media (max-width: 768px) {
+    #resolution-badge {
+        display: none; /* Hide 212x66 text on small screens */
+    }
+    .ascii-toggle-label {
+        display: none; /* Hide "ASCII MODE" text, just keep the switch */
+    }
+    .ascii-toggle-wrapper {
+        margin-right: 0;
+    }
+    .logo, #status {
+        font-size: 0.85em;
+    }
+    #status-header {
+        padding: 10px 10px;
     }
 }

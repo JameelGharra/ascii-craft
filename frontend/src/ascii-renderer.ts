@@ -3,12 +3,16 @@ const PALETTE_COUNT = 70;
 
 export class AsciiRenderer {
     private ctx: CanvasRenderingContext2D;
-    private charLUT: string[] = new Array(256);
-    private colorLUT: string[] = new Array(256);
     private width: number;
     private height: number;
     private cellWidth: number = 0;
     private cellHeight: number = 0;
+    
+    // caching
+    private colorLUT: string[] = new Array(256);
+    private charLUT: string[] = new Array(256);
+    private xPositions: number[] = [];
+    private yPositions: number[] = [];
 
     constructor(canvas: HTMLCanvasElement, width: number, height: number) {
         this.width = width;
@@ -58,21 +62,26 @@ export class AsciiRenderer {
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
 
+        let lastColor = -1;
+
         // 2. Iterate pixels and draw characters
         for (let y = 0; y < this.height; y++) {
-            const yPos = Math.floor(y * this.cellHeight);
+            const yPos = this.yPositions[y];
             for (let x = 0; x < this.width; x++) {
                 const idx = y * this.width + x;
                 const pixel8Bit = buffer8Bit[idx];
 
                 // Performance optimization: don't draw pure black/empty space
                 if (pixel8Bit === 0) continue;
-
-                this.ctx.fillStyle = this.colorLUT[pixel8Bit];
                 
+                // only touch canvas api if the color actually changes
+                if (pixel8Bit !== lastColor) {
+                    this.ctx.fillStyle = this.colorLUT[pixel8Bit];
+                    lastColor = pixel8Bit;
+                }
+
                 // Draw the precomputed ASCII character at the cell's physical coordinate
-                const xPos = Math.floor(x * this.cellWidth);
-                this.ctx.fillText(this.charLUT[pixel8Bit], xPos, yPos);
+                this.ctx.fillText(this.charLUT[pixel8Bit], this.xPositions[x], yPos);
             }
         }
     }
@@ -88,6 +97,16 @@ export class AsciiRenderer {
         
         this.cellWidth = this.ctx.canvas.width / this.width;
         this.cellHeight = this.ctx.canvas.height / this.height;
+
+        this.xPositions = new Array(this.width);
+        for(let x = 0; x < this.width; x++) {
+            this.xPositions[x] = Math.floor(x * this.cellWidth);
+        }
+
+        this.yPositions = new Array(this.height);
+        for(let y = 0; y < this.height; y++) {
+            this.yPositions[y] = Math.floor(y * this.cellHeight);
+        }
         
         this.setupContext();
     }

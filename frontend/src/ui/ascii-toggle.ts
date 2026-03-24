@@ -32,12 +32,17 @@ export class AsciiToggle {
         this.wrapper.appendChild(label);
         this.wrapper.appendChild(switchLabel);
 
-        // 2. Append to header
         const header = document.getElementById("status-header");
-        if (header) {
-            // Insert it just before the resolution badge on the right side
-            const badge = document.getElementById("resolution-badge");
-            header.insertBefore(this.wrapper, badge);
+        const badge = document.getElementById("resolution-badge");
+        
+        if (header && badge) {
+            // Group them so flexbox "space-between" keeps the status perfectly centered
+            const rightGroup = document.createElement("div");
+            rightGroup.className = "header-right-group";
+            
+            header.insertBefore(rightGroup, badge);
+            rightGroup.appendChild(this.wrapper);
+            rightGroup.appendChild(badge);
         }
 
         // 3. Bind events

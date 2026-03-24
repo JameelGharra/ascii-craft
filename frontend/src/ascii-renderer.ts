@@ -47,7 +47,7 @@ export class AsciiRenderer {
         }
     }
 
-private setupContext() {
+    private setupContext() {
         // 1. Set font size strictly to the cell height to fill vertical space
         const fontSize = Math.ceil(this.cellHeight); 
         this.ctx.font = `${fontSize}px 'JetBrains Mono', monospace, Courier`;

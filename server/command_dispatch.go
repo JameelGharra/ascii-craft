@@ -27,6 +27,8 @@ func NewCommandDispatcher(client *ipc.Client) *CommandDispatcher {
 			"!destroy":      ipc.CmdDestroy,
 			"!turnleft":     ipc.CmdTurnLeft,
 			"!turnright":    ipc.CmdTurnRight,
+			"!lookleft":     ipc.CmdLookLeft,
+			"!lookright":    ipc.CmdLookRight,
 			"!lookup":       ipc.CmdLookUp,
 			"!lookdown":     ipc.CmdLookDown,
 			"!jumpforward":  ipc.CmdJumpForward,

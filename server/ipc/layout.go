@@ -28,6 +28,8 @@ const (
 	CmdJumpBackward = 15
 	CmdJumpLeft     = 16
 	CmdJumpRight    = 17
+	CmdLookLeft     = 18
+	CmdLookRight    = 19
 
 	MinSupportedSlotIdx = 0
 	MaxSupportedSlotIdx = 9

@@ -59,7 +59,7 @@ func dynamicHandshake(conn net.Conn, width, height int) error {
 		"commands": map[string]interface{}{
 			"standard": []string{
 				"!w", "!a", "!s", "!d", "!jump", "!fly", "!build", "!destroy",
-				"!turnleft", "!turnright", "!lookup", "!lookdown",
+				"!turnleft", "!turnright", "!lookup", "!lookdown", "!lookleft", "!lookright",
 				"!jumpforward", "!jumpbackward", "!jumpleft", "!jumpright",
 			},
 			"parameterized": map[string]interface{}{

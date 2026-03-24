@@ -38,6 +38,8 @@ typedef enum {
     IPC_CMD_JUMP_BACKWARD,
     IPC_CMD_JUMP_LEFT,
     IPC_CMD_JUMP_RIGHT,
+    IPC_CMD_LOOK_LEFT,  // yaw -15
+    IPC_CMD_LOOK_RIGHT, // yaw +15
 } IPCCommandType;
 
 typedef struct {

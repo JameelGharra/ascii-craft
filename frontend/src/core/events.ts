@@ -24,4 +24,6 @@ export interface AppEventMap {
 
     // --- UI Events ---
     'ui:ascii_toggle': (enabled: boolean) => void;
+    'ui:chat_clear': () => void;
+    'ui:chat_help': (categories: { name: string, commands: string }[]) => void;
 }

@@ -112,6 +112,8 @@ export class Application implements IDisposable {
 
         // UI
         this.bus.on('ui:ascii_toggle', (enabled) => this.framePipeline.setAsciiMode(enabled));
+        this.bus.on('ui:chat_clear', () => this.chatUI.clearChat());
+        this.bus.on('ui:chat_help', (categories) => this.chatUI.appendHelp(categories));
     }
 
     // --- Event Handlers (Bound via Arrow Functions to preserve 'this') ---
@@ -124,6 +126,7 @@ export class Application implements IDisposable {
         this.inputController.setSystemDisabled(true, "WAITING FOR VIDEO FEED...");
         this.framePipeline.resetSyncState();
         this.latencyTracker.start();
+        this.chatUI.appendChat("System", "Uplink established. Type !help for a list of available commands.", "system");
     };
 
     private onDisconnected = (): void => {

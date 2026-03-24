@@ -16,6 +16,8 @@ export class InputController implements IDisposable {
     private history: string[] =[];
     private historyIndex = -1;
 
+    private readonly clientCommands = new Set(["!help", "!clear", "!cmds"]);
+
     constructor(bus: EventBus<AppEventMap>, config: AppConfig) {
         this.bus = bus;
         this.config = config;
@@ -35,7 +37,7 @@ export class InputController implements IDisposable {
     /**
      * Toggles the input field state based on global system connection status.
      */
-    public setSystemDisabled(disabled: boolean, placeholderMessage: string = "Enter command (!w, !jump, etc)...") {
+    public setSystemDisabled(disabled: boolean, placeholderMessage: string = "Enter command (type !help)...") {
         this.isSystemDisabled = disabled;
         if (disabled) {
             this.chatInput.disabled = true;
@@ -57,16 +59,20 @@ export class InputController implements IDisposable {
             
             const msg = this.chatInput.value.trim().toLowerCase();
             if (msg) {
-                if (this.isValidCommand(msg)) {
-                    this.history.push(msg);
-                    if (this.history.length > this.MAX_HISTORY_LENGTH) this.history.shift();
-                    this.historyIndex = this.history.length;
-                    
+                if (this.clientCommands.has(msg)) {
+                    this.handleClientCommand(msg);
+                }
+                else if (this.isValidCommand(msg)) {
                     this.bus.emit('input:command_valid', msg);
                     this.triggerCooldown();
                 } else {
                     this.bus.emit('input:command_invalid', msg);
+                    this.chatInput.value = '';
+                    return ;
                 }
+                this.history.push(msg);
+                if (this.history.length > this.MAX_HISTORY_LENGTH) this.history.shift();
+                this.historyIndex = this.history.length;
                 this.chatInput.value = '';
             }
         } else if (e.key === 'ArrowUp') {
@@ -101,6 +107,31 @@ export class InputController implements IDisposable {
             }
         }
         return this.standardCommandSet.has(cmd);
+    }
+
+    private handleClientCommand(cmd: string): void {
+        // Echo the user's command locally
+        this.bus.emit('server:system_message', `> ${cmd}`);
+
+        if (cmd === '!clear') {
+            this.bus.emit('ui:chat_clear');
+        } 
+        else if (cmd === '!help' || cmd === '!cmds') {
+            const standard = Array.from(this.standardCommandSet).join(', ');
+            
+            let paramStrings = [];
+            for (const[prefix, bounds] of Object.entries(this.config.commands.parameterized)) {
+                paramStrings.push(`${prefix} <${bounds.min}-${bounds.max}>`);
+            }
+            const params = paramStrings.join(', ');
+
+            // Dispatch as an array of categories
+            this.bus.emit('ui:chat_help',[
+                { name: "MOVEMENT / ACTION", commands: standard },
+                { name: "ITEMS / SLOTS", commands: params },
+                { name: "LOCAL CLIENT", commands: "!help, !cmds, !clear" }
+            ]);
+        }
     }
 
     private triggerCooldown() {
